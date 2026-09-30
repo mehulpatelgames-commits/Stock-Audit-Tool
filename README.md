@@ -154,3 +154,4 @@ Same department name → re-import → automatically replaces previous data
 4. Tap the stock card → enter physical qty
 5. Tap **"Same as Management"** if qty matches, or enter your own count
 6. Save → moves to next item
+"# Stock-Audit-Tool" 
