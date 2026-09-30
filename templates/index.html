@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#1565C0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>PIL Stock Audit</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ══ TOAST CONTAINER ══════════════════════════════ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ══ SPINNER ══════════════════════════════════════ -->
+<div class="spinner-overlay" id="spinner"><div class="spinner"></div></div>
+
+<!-- ══════════════════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════════════════ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">📊</div>
+    <div class="login-title">PIL Stock Audit</div>
+    <div class="login-sub">Physical Verification Tool</div>
+
+    <div class="form-group">
+      <label>Select Your Name</label>
+      <select id="userSelect">
+        <option value="">-- Select --</option>
+      </select>
+    </div>
+
+    <button class="btn btn-primary" onclick="App.login()">Continue →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════════════ -->
+<div id="mainApp" style="display:none;">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="topbarTitle">Stock Audit</div>
+      <div class="topbar-user" id="topbarUser"></div>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" onclick="App.logout()" title="Logout">⏻</button>
+    </div>
+  </div>
+
+  <!-- ── DASHBOARD PAGE ─────────────────────────── -->
+  <div class="page active" id="pageDashboard">
+    <div class="section-title" style="margin-top:4px;">Departments</div>
+    <div id="deptList">
+      <div class="empty-state">
+        <div class="empty-icon">📂</div>
+        <p>No departments loaded.<br>Ask admin to import data.</p>
+      </div>
+    </div>
+
+    <!-- Admin only section -->
+    <div id="adminSection" style="display:none;">
+      <div class="divider"></div>
+      <div class="section-title">Admin Actions</div>
+      <button class="btn btn-primary" onclick="Modals.openImport()">📤 Import Excel</button>
+      <div class="mt-8"></div>
+      <button class="btn btn-outline" onclick="App.exportAll()">📥 Export Report</button>
+    </div>
+  </div>
+
+  <!-- ── AUDIT PAGE ──────────────────────────────── -->
+  <div class="page" id="pageAudit">
+
+    <!-- Dept chips -->
+    <div class="dept-selector" id="deptChips"></div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <div class="filter-bar-header">
+        <span class="filter-title">🔍 Search &amp; Filter</span>
+        <button class="filter-settings-btn" onclick="Modals.openFilterConfig()">⚙️ Filters</button>
+      </div>
+      <div class="filter-inputs">
+        <input type="text" id="globalSearch" placeholder="Search anything..." oninput="Audit.applyFilter()">
+        <div id="dynamicFilters"></div>
+      </div>
+    </div>
+
+    <div class="results-meta" id="resultsMeta"></div>
+    <div id="stockList"></div>
+  </div>
+
+  <!-- ── ADD NEW STOCK PAGE ─────────────────────── -->
+  <div class="page" id="pageAdd">
+    <div class="add-form">
+      <div class="section-title">Add New Stock Item</div>
+      <div class="form-group">
+        <label>Department</label>
+        <select id="addDeptSelect"></select>
+      </div>
+      <div id="addFormFields">
+        <div class="empty-state">
+          <p>Select a department to see fields</p>
+        </div>
+      </div>
+      <div class="mt-12" id="addSubmitBtn" style="display:none;">
+        <button class="btn btn-success" onclick="Add.submit()">✅ Add Entry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PHOTO PAGE ──────────────────────────────── -->
+  <div class="page" id="pagePhoto">
+
+    <div class="admin-card">
+      <div class="admin-card-title">📸 Inventory Photo</div>
+
+      <div class="form-group">
+        <label>Department</label>
+        <select id="photoDeptSelect"></select>
+      </div>
+
+      <div class="photo-upload-area" id="photoArea" onclick="document.getElementById('photoFileInput').click()">
+        <div class="photo-icon">📷</div>
+        <div class="photo-label">Tap to take photo or choose from gallery</div>
+        <img class="photo-preview" id="photoPreview">
+      </div>
+
+      <input type="file" id="photoFileInput" accept="image/*" capture="environment"
+             style="display:none" onchange="Photo.onFileSelect(this)">
+
+      <div class="form-group mt-8">
+        <label>Remark</label>
+        <input type="text" id="photoRemark" placeholder="Enter remark (optional)">
+      </div>
+
+      <button class="btn btn-accent" onclick="Photo.upload()">⬆️ Upload Photo</button>
+    </div>
+
+  </div>
+
+  <!-- ── BOTTOM NAV ──────────────────────────────── -->
+  <div class="bottom-nav">
+    <button class="nav-item active" id="nav-dashboard" onclick="App.showPage('dashboard')">
+      <span class="nav-icon">🏠</span>
+      <span>Home</span>
+    </button>
+    <button class="nav-item" id="nav-audit" onclick="App.showPage('audit')">
+      <span class="nav-icon">✅</span>
+      <span>Audit</span>
+    </button>
+    <button class="nav-item" id="nav-add" onclick="App.showPage('add')">
+      <span class="nav-icon">➕</span>
+      <span>Add</span>
+    </button>
+    <button class="nav-item" id="nav-photo" onclick="App.showPage('photo')">
+      <span class="nav-icon">📸</span>
+      <span>Photo</span>
+    </button>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: IMPORT EXCEL (Admin)
+══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📤 Import Excel</div>
+
+    <div class="form-group">
+      <label>Department Name</label>
+      <input type="text" id="importDeptName" placeholder="e.g. Fabric, Yarn, Packaging">
+    </div>
+
+    <div class="form-group">
+      <label>Excel File</label>
+      <input type="file" id="importFile" accept=".xlsx,.xls">
+    </div>
+
+    <div id="importQtyField" style="display:none;">
+      <div class="form-group">
+        <label>Which column is the Management Qty?</label>
+        <select id="importQtyColumn"></select>
+      </div>
+    </div>
+
+    <div class="form-group" id="importPreview" style="display:none;">
+      <div class="text-muted" id="importPreviewText"></div>
+    </div>
+
+    <button class="btn btn-primary" onclick="Admin.importExcel()">Import Now</button>
+    <div class="mt-8"></div>
+    <button class="btn btn-ghost" onclick="Modals.close('importModal')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: FILTER CONFIG (User-configurable)
+══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="filterModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚙️ Choose Your Filters</div>
+    <div class="text-muted" style="margin-bottom:16px;">
+      Select which columns appear as dedicated filter fields. Your choice is saved on this device.
+    </div>
+    <div class="filter-toggle-list" id="filterToggleList"></div>
+    <div class="mt-16"></div>
+    <button class="btn btn-primary" onclick="Audit.applyFilterConfig()">Apply</button>
+    <div class="mt-8"></div>
+    <button class="btn btn-ghost" onclick="Modals.close('filterModal')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: STOCK CARD DETAIL (verify)
+══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="stockModal">
+  <div class="modal-sheet" id="stockModalContent"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

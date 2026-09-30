@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+python-multipart
+openpyxl
+google-api-python-client
+google-auth
+python-dotenv
+pydantic
+pydantic-settings
+aiofiles
+python-jose[cryptography]

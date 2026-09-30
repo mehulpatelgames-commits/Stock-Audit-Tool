@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+  body {font-family:'Segoe UI'; background:#eef5fb; margin:0; padding:10px;}
+  .container {background:#fff; padding:10px; border-radius:10px;}
+
+  button {
+    padding:12px; border:none; border-radius:8px;
+    background:#2196F3; color:white; width:100%; margin-top:5px;
+  }
+
+  input, select {
+    padding:10px; border-radius:8px; border:1px solid #ccc;
+    width:100%; margin-bottom:8px;
+  }
+
+  .tabs {display:flex; gap:5px; margin-bottom:10px;}
+  .tabs button {flex:1; background:#d0e7ff; color:black;}
+  .active {background:#2196F3 !important; color:white !important;}
+
+  #loginScreen {
+    max-width:300px; margin:auto; margin-top:100px;
+    text-align:center; background:white; padding:20px; border-radius:10px;
+  }
+
+  .card {
+    background:white; padding:10px; border-radius:10px;
+    margin-bottom:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1);
+  }
+
+  .grid {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:5px; font-size:13px;
+  }
+
+  .full {grid-column:span 2;}
+  </style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <h3>📊 CA Stock Audit</h3>
+  <select id="userName">
+    <option value="">-- Select --</option>
+    <option>Jay Samani</option>
+    <option>Mehul Surani</option>
+    <option>Krutik Patel</option>
+    <option>Hardik Surani</option>
+    <option>Sidharth Varyani</option>
+    <option>Deepak Kumar</option>
+  </select>
+  <button onclick="startApp()">Continue</button>
+</div>
+
+<!-- MAIN -->
+<div id="mainApp" style="display:none;" class="container">
+
+<h3>Stock Audit</h3>
+
+<div class="tabs">
+  <button id="tabAudit" onclick="showTab('audit')">Audit</button>
+  <button id="tabAdd" onclick="showTab('add')">Add</button>
+  <button id="tabPhoto" onclick="showTab('photo')">Photo</button>
+</div>
+
+<!-- AUDIT -->
+<div id="auditTab">
+<input id="globalSearch" placeholder="Search..." oninput="applyFilter()">
+<input id="standFilter" placeholder="Stand..." oninput="applyFilter()">
+<div id="cardContainer"></div>
+</div>
+
+<!-- ADD -->
+<div id="addTab" style="display:none;">
+<input id="m1" placeholder="Marking">
+<input id="m2" placeholder="RollNo">
+<input id="m3" placeholder="Quality">
+<input id="m4" placeholder="ReqGSM">
+<input id="m5" placeholder="Metre">
+<input id="m6" placeholder="Gross">
+<input id="m7" placeholder="Net">
+<input id="m8" placeholder="Stand">
+<input id="m9" placeholder="Remark">
+<input id="m10" placeholder="Physical Qty">
+<button onclick="addNew()">Add Entry</button>
+</div>
+
+<!-- PHOTO -->
+<div id="photoTab" style="display:none;">
+
+<h4>Inventory Photo</h4>
+
+<!-- CAMERA (DIRECT OPEN) -->
+<input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+<!-- GALLERY -->
+<input type="file" id="galleryInput" accept="image/*">
+
+<input type="text" id="photoRemark" placeholder="Enter Remark">
+
+<button onclick="uploadPhoto()">Save Photo</button>
+
+</div>
+
+</div>
+
+<script>
+
+let stockData = [];
+let filteredData = [];
+let currentUser = "";
+
+// LOGIN
+function startApp() {
+  let user = userName.value;
+  if (!user) return alert("Select name");
+
+  currentUser = user;
+  loginScreen.style.display = "none";
+  mainApp.style.display = "block";
+
+  showTab('audit'); // default
+  loadData();
+}
+
+// TAB SWITCH + ACTIVE HIGHLIGHT
+function showTab(tab) {
+
+  auditTab.style.display = 'none';
+  addTab.style.display = 'none';
+  photoTab.style.display = 'none';
+
+  tabAudit.classList.remove("active");
+  tabAdd.classList.remove("active");
+  tabPhoto.classList.remove("active");
+
+  if (tab === 'audit') {
+    auditTab.style.display = 'block';
+    tabAudit.classList.add("active");
+  }
+
+  if (tab === 'add') {
+    addTab.style.display = 'block';
+    tabAdd.classList.add("active");
+  }
+
+  if (tab === 'photo') {
+    photoTab.style.display = 'block';
+    tabPhoto.classList.add("active");
+  }
+}
+
+// LOAD DATA
+function loadData() {
+  google.script.run.withSuccessHandler(data=>{
+    stockData = data;
+    cardContainer.innerHTML = "";
+  }).getStockData();
+}
+
+// FILTER
+function applyFilter() {
+  let normalize = str => String(str||"").toLowerCase().replace(/\s|-/g,"");
+  let g = normalize(globalSearch.value);
+  let s = normalize(standFilter.value);
+
+  if (!g && !s) {
+    cardContainer.innerHTML = "";
+    return;
+  }
+
+  filteredData = stockData.filter(row=>{
+    let m = normalize(row.marking);
+    let r = normalize(row.rollNo);
+    let q = normalize(row.quality);
+    let st = normalize(row.stand);
+
+    return (
+      (!g || m.includes(g)||r.includes(g)||q.includes(g)) &&
+      (!s || st.includes(s))
+    );
+  });
+
+  displayData(filteredData);
+}
+
+// DISPLAY
+function displayData(data) {
+  let div = document.getElementById("cardContainer");
+  div.innerHTML = "";
+
+  data.forEach((row, index) => {
+    div.innerHTML += `
+    <div class="card">
+      <div class="grid">
+        <div>Mark: ${row.marking}</div>
+        <div>Roll: ${row.rollNo}</div>
+        <div class="full">Quality: ${row.quality}</div>
+        <div>GSM: ${row.reqgsm}</div>
+        <div>Metre: ${row.metre}</div>
+        <div>Gross: ${row.gross}</div>
+        <div>Net: ${row.net}</div>
+        <div>Stand: ${row.stand}</div>
+
+        <div class="full">
+          <input type="text" id="r${index}" value="${row.remark || ''}" placeholder="Remark">
+        </div>
+
+        <div class="full">
+          <input type="number" id="p${index}" value="${row.physical || ''}" placeholder="Physical Qty">
+        </div>
+
+        <div class="full">
+          <button onclick="save(${index})">Save</button>
+        </div>
+
+      </div>
+    </div>`;
+  });
+}
+
+// SAVE
+function save(index) {
+  let row = filteredData[index];
+  let qty = document.getElementById("p"+index).value;
+  let remark = document.getElementById("r"+index).value;
+
+  if (qty === "") return alert("Enter qty");
+
+  google.script.run.withSuccessHandler(()=>{
+    alert("Saved");
+  }).updateStock(row.row, true, Number(qty), remark, currentUser);
+}
+
+// ADD
+function addNew() {
+  let data = {
+    marking:m1.value,
+    rollNo:m2.value,
+    quality:m3.value,
+    reqgsm:m4.value,
+    metre:m5.value,
+    gross:m6.value,
+    net:m7.value,
+    stand:m8.value,
+    remark:m9.value,
+    physical:m10.value
+  };
+
+  google.script.run.withSuccessHandler(()=>{
+    alert("Added");
+    showTab('audit');
+    loadData();
+  }).addNewStock(data, currentUser);
+}
+
+// ✅ FIXED PHOTO UPLOAD FUNCTION
+function uploadPhoto() {
+
+  let file =
+    document.getElementById("cameraInput").files[0] ||
+    document.getElementById("galleryInput").files[0];
+
+  let remark = document.getElementById("photoRemark").value;
+
+  if (!file) return alert("Capture or select photo");
+
+  // LIMIT SIZE (VERY IMPORTANT)
+  if (file.size > 2 * 1024 * 1024) {
+    alert("File too large. Max 2MB allowed.");
+    return;
+  }
+
+  let reader = new FileReader();
+
+  reader.onload = function(e) {
+
+    google.script.run
+      .withSuccessHandler(function(msg) {
+        alert("✅ " + msg);
+
+        // Reset inputs
+        document.getElementById("cameraInput").value = "";
+        document.getElementById("galleryInput").value = "";
+        document.getElementById("photoRemark").value = "";
+
+      })
+      .withFailureHandler(function(err) {
+        alert("❌ Error: " + err.message);
+      })
+      .uploadPhoto(e.target.result, file.name, currentUser, remark);
+  };
+
+  reader.readAsDataURL(file);
+}
+
+</script>
+
+</body>
+</html>
