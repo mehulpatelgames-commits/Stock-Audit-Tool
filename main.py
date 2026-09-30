@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.requests import Request
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import init_db
@@ -24,7 +23,6 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
 
 # Include all routers
 app.include_router(auth.router)
@@ -35,8 +33,8 @@ app.include_router(photo.router)
 
 
 @app.get("/")
-async def root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def root():
+    return FileResponse("templates/index.html")
 
 
 if __name__ == "__main__":

@@ -16,11 +16,11 @@ const State = {
   user: null,
   isAdmin: false,
   activeAudit: null,
-  departments: [],
-  activeDeptId: null,
+  departments: [],       // all departments (admin sees all)
+  activeDeptId: null,    // currently active dept in audit tab
+  lockedDeptId: null,    // non-admin: locked to this dept for entire session
   stockItems: [],
   filteredItems: [],
-  // Per-dept filter prefs stored in localStorage
   filterPrefs: JSON.parse(localStorage.getItem('filterPrefs') || '{}'),
 };
 
@@ -43,16 +43,18 @@ function hideSpinner() { document.getElementById('spinner').classList.remove('sh
 const App = {
 
   async init() {
-    const users = await API.get('/api/auth/users');
+    // Load user list for dropdown
+    const res = await API.get('/api/auth/users');
     const sel = document.getElementById('userSelect');
-    users.users.forEach(u => {
+    res.users.forEach(u => {
       const opt = document.createElement('option');
       opt.value = opt.textContent = u;
       sel.appendChild(opt);
     });
   },
 
-  async login() {
+  // ── STEP 1: Validate name ─────────────────────────
+  async loginStep1() {
     const name = document.getElementById('userSelect').value;
     if (!name) { toast('Please select your name', 'warning'); return; }
 
@@ -62,54 +64,135 @@ const App = {
       State.user = res.name;
       State.isAdmin = res.is_admin;
 
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('mainApp').style.display = 'block';
-      document.getElementById('topbarUser').textContent = res.name;
+      // Load audit + departments before showing step 2
+      await App.loadAudit();
 
       if (res.is_admin) {
-        document.getElementById('adminSection').style.display = 'block';
+        // Admin skips dept selection — goes straight to app
+        App.enterApp(null);
+      } else {
+        // Non-admin must pick a department
+        App.showDeptSelection();
       }
-
-      await App.loadAudit();
-      App.showPage('dashboard');
     } catch(e) {
-      toast('Login failed', 'error');
+      toast('Login failed. Try again.', 'error');
     } finally {
       hideSpinner();
     }
   },
 
-  logout() {
-    if (!confirm('Logout?')) return;
+  // ── STEP 2: Show dept selection for non-admin ─────
+  showDeptSelection() {
+    document.getElementById('loginStep1').style.display = 'none';
+    document.getElementById('loginStep2').style.display = 'block';
+    document.getElementById('loginNameDisplay').textContent = State.user;
+
+    const container = document.getElementById('deptSelectList');
+
+    if (!State.departments.length) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding:24px 0;">
+          <div class="empty-icon" style="font-size:32px;">😕</div>
+          <p>No departments available.<br>Ask admin to import data first.</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = State.departments.map(dept => {
+      const pct = dept.total_items ? Math.round((dept.verified_items / dept.total_items) * 100) : 0;
+      return `
+        <div class="dept-card" onclick="App.enterApp(${dept.id})" style="margin-bottom:10px;">
+          <div class="dept-card-header">
+            <div>
+              <div class="dept-name">${dept.name}</div>
+              <div class="dept-count">${dept.total_items} items · ${dept.verified_items} verified</div>
+            </div>
+            <div style="font-size:20px; font-weight:700; color:var(--primary)">${pct}%</div>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${pct}%"></div>
+          </div>
+        </div>`;
+    }).join('');
+  },
+
+  backToStep1() {
+    document.getElementById('loginStep1').style.display = 'block';
+    document.getElementById('loginStep2').style.display = 'none';
     State.user = null;
     State.isAdmin = false;
-    State.activeAudit = null;
-    State.departments = [];
-    document.getElementById('mainApp').style.display = 'none';
-    document.getElementById('loginScreen').style.display = 'flex';
-    document.getElementById('userSelect').value = '';
+  },
+
+  // ── ENTER THE APP ────────────────────────────────
+  enterApp(deptId) {
+    // deptId = null for admin, dept ID for non-admin
+    State.lockedDeptId = deptId;
+    State.activeDeptId = deptId || (State.departments[0]?.id ?? null);
+
+    // Show/hide screens
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+
+    // Topbar
+    document.getElementById('topbarUser').textContent = State.user;
+
+    if (State.isAdmin) {
+      document.getElementById('topbarTitle').textContent = State.activeAudit?.name || 'Stock Audit';
+      document.getElementById('adminSection').style.display = 'block';
+      document.getElementById('deptChips').style.display = 'flex';
+      document.getElementById('dashSectionTitle').textContent = 'All Departments';
+      Audit.renderDeptChips();
+    } else {
+      const dept = State.departments.find(d => d.id === deptId);
+      document.getElementById('topbarTitle').textContent = dept ? dept.name : 'Stock Audit';
+      document.getElementById('topbarUser').textContent = `${State.user}`;
+      document.getElementById('adminSection').style.display = 'none';
+      document.getElementById('deptChips').style.display = 'none';
+      document.getElementById('dashSectionTitle').textContent = 'My Department';
+    }
+
+    // Render dashboard and load stock
+    Dashboard.render();
+    Add.populateForm();
+    App.showPage('dashboard');
+
+    // Auto-load stock for audit tab
+    if (State.activeDeptId) Audit.loadStock();
   },
 
   async loadAudit() {
     try {
       const audit = await API.get('/api/audits/active');
       State.activeAudit = audit;
-      document.getElementById('topbarTitle').textContent = audit.name;
-      await App.loadDepartments();
+      const depts = await API.get(`/api/departments/audit/${audit.id}`);
+      State.departments = depts;
     } catch(e) {
-      // No active audit — admin needs to create one
-      document.getElementById('topbarTitle').textContent = 'PIL Stock Audit';
+      State.departments = [];
     }
   },
 
-  async loadDepartments() {
-    if (!State.activeAudit) return;
-    const depts = await API.get(`/api/departments/audit/${State.activeAudit.id}`);
-    State.departments = depts;
-    Dashboard.render();
-    Audit.renderDeptChips();
-    Add.populateDeptSelect();
-    Photo.populateDeptSelect();
+  logout() {
+    if (!confirm('Logout and return to login?')) return;
+
+    // Reset all state
+    State.user = null;
+    State.isAdmin = false;
+    State.activeAudit = null;
+    State.departments = [];
+    State.activeDeptId = null;
+    State.lockedDeptId = null;
+    State.stockItems = [];
+    State.filteredItems = [];
+
+    // Reset login UI
+    document.getElementById('mainApp').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginStep1').style.display = 'block';
+    document.getElementById('loginStep2').style.display = 'none';
+    document.getElementById('userSelect').value = '';
+    document.getElementById('globalSearch').value = '';
+    document.getElementById('dynamicFilters').innerHTML = '';
+    document.getElementById('stockList').innerHTML = '';
   },
 
   showPage(page) {
@@ -117,13 +200,9 @@ const App = {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.getElementById(`page${page.charAt(0).toUpperCase() + page.slice(1)}`).classList.add('active');
     document.getElementById(`nav-${page}`).classList.add('active');
-
-    if (page === 'audit' && State.activeDeptId) Audit.loadStock();
-  },
-
-  exportAll() {
-    if (!State.activeDeptId) { toast('Select a department first from the Audit tab', 'warning'); return; }
-    window.location.href = `/api/stock/${State.activeDeptId}/export`;
+    if (page === 'audit') {
+      Audit.renderDynamicFilters();
+    }
   }
 };
 
@@ -133,16 +212,22 @@ const App = {
 const Dashboard = {
   render() {
     const container = document.getElementById('deptList');
-    if (!State.departments.length) {
+
+    // Decide which departments to show
+    const depts = State.isAdmin
+      ? State.departments
+      : State.departments.filter(d => d.id === State.lockedDeptId);
+
+    if (!depts.length) {
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">📂</div>
-          <p>No departments loaded.<br>Ask admin to import data.</p>
+          <p>${State.isAdmin ? 'No departments imported yet.' : 'No data available for your department.'}</p>
         </div>`;
       return;
     }
 
-    container.innerHTML = State.departments.map(dept => {
+    container.innerHTML = depts.map(dept => {
       const pct = dept.total_items ? Math.round((dept.verified_items / dept.total_items) * 100) : 0;
       const pending = dept.total_items - dept.verified_items;
       return `
@@ -150,7 +235,7 @@ const Dashboard = {
           <div class="dept-card-header">
             <div>
               <div class="dept-name">${dept.name}</div>
-              <div class="dept-count">${dept.total_items} items</div>
+              <div class="dept-count">${dept.total_items} items total</div>
             </div>
             <div style="font-size:22px; font-weight:700; color:var(--primary)">${pct}%</div>
           </div>
@@ -167,9 +252,9 @@ const Dashboard = {
 
   openDept(deptId) {
     State.activeDeptId = deptId;
-    App.showPage('audit');
-    Audit.renderDeptChips();
+    if (State.isAdmin) Audit.renderDeptChips();
     Audit.loadStock();
+    App.showPage('audit');
   }
 };
 
@@ -178,7 +263,9 @@ const Dashboard = {
 // ══════════════════════════════════════════════════════
 const Audit = {
 
+  // Admin only — dept switching chips
   renderDeptChips() {
+    if (!State.isAdmin) return;
     const container = document.getElementById('deptChips');
     container.innerHTML = State.departments.map(d => `
       <button class="dept-chip ${d.id === State.activeDeptId ? 'active' : ''}"
@@ -188,6 +275,7 @@ const Audit = {
   },
 
   switchDept(deptId) {
+    if (!State.isAdmin) return; // safety guard
     State.activeDeptId = deptId;
     Audit.renderDeptChips();
     Audit.renderDynamicFilters();
@@ -203,10 +291,8 @@ const Audit = {
     if (!dept) return [];
     const key = `dept_${State.activeDeptId}`;
     if (State.filterPrefs[key]) return State.filterPrefs[key];
-    // Default: Stand if exists, else first 2 columns
     const cols = dept.columns || [];
-    const defaults = cols.includes('Stand') ? ['Stand'] : cols.slice(0, 2);
-    return defaults;
+    return cols.includes('Stand') ? ['Stand'] : cols.slice(0, 2);
   },
 
   renderDynamicFilters() {
@@ -224,6 +310,7 @@ const Audit = {
     try {
       const items = await API.get(`/api/stock/${State.activeDeptId}`);
       State.stockItems = items;
+      document.getElementById('globalSearch').value = '';
       Audit.renderDynamicFilters();
       Audit.applyFilter();
     } catch(e) {
@@ -244,31 +331,29 @@ const Audit = {
       if (el) filterVals[col] = normalize(el.value);
     });
 
+    const hasFilter = g || Object.values(filterVals).some(v => v);
+
     State.filteredItems = State.stockItems.filter(item => {
-      // Global search across all data fields
       if (g) {
         const allText = Object.values(item.data).join(' ');
         if (!normalize(allText).includes(g)) return false;
       }
-      // Per-column filters
       for (const [col, val] of Object.entries(filterVals)) {
         if (!val) continue;
-        const cellVal = normalize(item.data[col] || '');
-        if (!cellVal.includes(val)) return false;
+        if (!normalize(item.data[col] || '').includes(val)) return false;
       }
       return true;
     });
 
-    document.getElementById('resultsMeta').textContent =
-      g || Object.values(filterVals).some(v => v)
-        ? `Showing ${State.filteredItems.length} of ${State.stockItems.length} items`
-        : '';
+    document.getElementById('resultsMeta').textContent = hasFilter
+      ? `Showing ${State.filteredItems.length} of ${State.stockItems.length} items`
+      : '';
 
-    if (!g && !Object.values(filterVals).some(v => v)) {
+    if (!hasFilter) {
       document.getElementById('stockList').innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">🔍</div>
-          <p>Use the search bar above to find stock items</p>
+          <p>Use the search bar above<br>to find stock items</p>
         </div>`;
     } else {
       Audit.renderStockList();
@@ -297,7 +382,7 @@ const Audit = {
       if (item.verified) {
         const diff = item.physical_qty - (item.management_qty || 0);
         if (diff === 0) {
-          badgeClass = 'badge-verified'; cardClass = 'verified'; badgeText = '✅ Verified';
+          badgeClass = 'badge-verified'; cardClass = 'verified'; badgeText = '✅ Match';
         } else {
           badgeClass = 'badge-discrepant'; cardClass = 'discrepant';
           badgeText = diff > 0 ? `🔺 +${diff}` : `🔻 ${diff}`;
@@ -308,12 +393,11 @@ const Audit = {
         cardClass = 'editing';
       }
 
-      // Show top 4 columns in the card grid
       const displayCols = cols.slice(0, 6);
       const gridHTML = displayCols.map(col => `
         <div class="data-item">
           <div class="data-label">${col}</div>
-          <div class="data-value">${item.data[col] || '—'}</div>
+          <div class="data-value">${item.data[col] ?? '—'}</div>
         </div>`).join('');
 
       return `
@@ -345,9 +429,7 @@ const Audit = {
     // Lock for editing
     API.patch(`/api/stock/${item.id}/edit-lock`, { user_name: State.user, action: 'lock' })
       .then(res => {
-        if (res.locked && res.by !== State.user) {
-          toast(res.warning, 'warning');
-        }
+        if (res.locked && res.by !== State.user) toast(res.warning, 'warning');
       });
 
     const allDataRows = cols.map(col => `
@@ -366,7 +448,6 @@ const Audit = {
       </div>
 
       <div class="stock-data-grid">${allDataRows}</div>
-
       <div class="divider"></div>
 
       <div class="mgmt-qty-row">
@@ -376,7 +457,9 @@ const Audit = {
 
       ${item.verified ? `
         <div style="background:${diff===0?'#E8F5E9':'#FFEBEE'}; border-radius:10px; padding:12px 14px; margin-bottom:12px;">
-          <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Previously Verified By ${item.verified_by}</div>
+          <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:600;">
+            Previously verified by ${item.verified_by}
+          </div>
           <div style="font-size:16px; font-weight:700; margin-top:4px;">
             Physical: ${item.physical_qty} &nbsp;|&nbsp; Diff: ${diff >= 0 ? '+'+diff : diff}
           </div>
@@ -395,10 +478,9 @@ const Audit = {
       </div>
 
       <button class="btn btn-primary" style="margin-bottom:8px;"
-              onclick="Audit.sameQty(${item.id}, ${item.management_qty})">
+              onclick="Audit.sameQty(${item.id}, ${item.management_qty ?? 0})">
         ✅ Same as Management (${item.management_qty ?? '—'})
       </button>
-
       <button class="btn btn-success" onclick="Audit.saveVerification(${item.id})">
         💾 Save My Count
       </button>
@@ -413,9 +495,8 @@ const Audit = {
   },
 
   async saveVerification(itemId) {
-    const qty = document.getElementById('modalPhyQty').value;
+    const qty    = document.getElementById('modalPhyQty').value;
     const remark = document.getElementById('modalRemark').value;
-
     if (qty === '') { toast('Enter physical qty', 'warning'); return; }
 
     showSpinner();
@@ -428,16 +509,17 @@ const Audit = {
       toast('✅ Saved!', 'success');
       Modals.close('stockModal');
       await Audit.loadStock();
-      await App.loadDepartments(); // refresh progress
+      // Refresh dashboard progress
+      const audit = await API.get('/api/audits/active');
+      State.activeAudit = audit;
+      const depts = await API.get(`/api/departments/audit/${audit.id}`);
+      State.departments = depts;
+      Dashboard.render();
     } catch(e) {
       toast('Save failed', 'error');
     } finally {
       hideSpinner();
     }
-  },
-
-  openFilterConfigModal() {
-    Modals.openFilterConfig();
   },
 
   applyFilterConfig() {
@@ -446,8 +528,8 @@ const Audit = {
     const key = `dept_${State.activeDeptId}`;
     const selected = [];
     dept.columns.forEach(col => {
-      const toggle = document.getElementById(`toggle_${col.replace(/\s/g,'_')}`);
-      if (toggle && toggle.checked) selected.push(col);
+      const t = document.getElementById(`toggle_${col.replace(/\s/g,'_')}`);
+      if (t && t.checked) selected.push(col);
     });
     State.filterPrefs[key] = selected;
     localStorage.setItem('filterPrefs', JSON.stringify(State.filterPrefs));
@@ -459,24 +541,17 @@ const Audit = {
 };
 
 // ══════════════════════════════════════════════════════
-// ADD NEW STOCK
+// ADD NEW STOCK (locked to user's dept)
 // ══════════════════════════════════════════════════════
 const Add = {
-  populateDeptSelect() {
-    const sel = document.getElementById('addDeptSelect');
-    sel.innerHTML = '<option value="">-- Select Department --</option>' +
-      State.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-    sel.onchange = Add.onDeptChange;
-  },
-
-  onDeptChange() {
-    const deptId = parseInt(document.getElementById('addDeptSelect').value);
+  populateForm() {
+    const deptId = State.lockedDeptId || State.activeDeptId;
     const dept = State.departments.find(d => d.id === deptId);
     const container = document.getElementById('addFormFields');
     const submitBtn = document.getElementById('addSubmitBtn');
 
     if (!dept) {
-      container.innerHTML = '<div class="empty-state"><p>Select a department to see fields</p></div>';
+      container.innerHTML = '<div class="empty-state"><p>No department selected</p></div>';
       submitBtn.style.display = 'none';
       return;
     }
@@ -491,9 +566,9 @@ const Add = {
   },
 
   async submit() {
-    const deptId = parseInt(document.getElementById('addDeptSelect').value);
+    const deptId = State.lockedDeptId || State.activeDeptId;
     const dept = State.departments.find(d => d.id === deptId);
-    if (!dept) { toast('Select a department', 'warning'); return; }
+    if (!dept) { toast('No department selected', 'warning'); return; }
 
     const data = {};
     dept.columns.forEach(col => {
@@ -503,18 +578,17 @@ const Add = {
 
     showSpinner();
     try {
-      const fd = new FormData();
-      fd.append('audit_id', State.activeAudit.id);
-      fd.append('dept_name', dept.name);
-      fd.append('qty_column', dept.columns[0]);
-      // We'll use a dedicated add-item endpoint instead
-      // For now send as JSON patch
       await fetch('/api/stock/add', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ department_id: deptId, data, verified_by: State.user })
       });
       toast('✅ Added!', 'success');
+      // Clear form
+      dept.columns.forEach(col => {
+        const el = document.getElementById(`add_${col.replace(/\s/g,'_')}`);
+        if (el) el.value = '';
+      });
       App.showPage('audit');
       await Audit.loadStock();
     } catch(e) {
@@ -529,12 +603,6 @@ const Add = {
 // PHOTO
 // ══════════════════════════════════════════════════════
 const Photo = {
-  populateDeptSelect() {
-    const sel = document.getElementById('photoDeptSelect');
-    sel.innerHTML = '<option value="">-- Select Department --</option>' +
-      State.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-  },
-
   onFileSelect(input) {
     const file = input.files[0];
     if (!file) return;
@@ -553,11 +621,10 @@ const Photo = {
     const input = document.getElementById('photoFileInput');
     const file = input.files[0];
     if (!file) { toast('Select a photo first', 'warning'); return; }
-
     if (file.size > 5 * 1024 * 1024) { toast('Max 5MB allowed', 'warning'); return; }
 
-    const remark  = document.getElementById('photoRemark').value;
-    const deptId  = document.getElementById('photoDeptSelect').value;
+    const remark = document.getElementById('photoRemark').value;
+    const deptId = State.lockedDeptId || State.activeDeptId;
 
     const fd = new FormData();
     fd.append('file', file);
@@ -567,7 +634,7 @@ const Photo = {
 
     showSpinner();
     try {
-      const res = await API.form('/api/photo/upload', fd);
+      await API.form('/api/photo/upload', fd);
       toast('✅ Uploaded!', 'success');
       input.value = '';
       document.getElementById('photoPreview').style.display = 'none';
@@ -585,9 +652,9 @@ const Photo = {
 // ADMIN
 // ══════════════════════════════════════════════════════
 const Admin = {
+
   async ensureAudit() {
     if (State.activeAudit) return State.activeAudit;
-    // Auto-create an audit if none exists
     const name = `Audit ${new Date().toLocaleDateString('en-IN')}`;
     const res = await API.post(`/api/audits/?created_by=${encodeURIComponent(State.user)}`, { name });
     State.activeAudit = res;
@@ -597,16 +664,16 @@ const Admin = {
 
   async importExcel() {
     const deptName = document.getElementById('importDeptName').value.trim();
-    const file = document.getElementById('importFile').files[0];
-    const qtyCol = document.getElementById('importQtyColumn').value;
+    const file     = document.getElementById('importFile').files[0];
+    const qtyCol   = document.getElementById('importQtyColumn').value;
 
     if (!deptName) { toast('Enter department name', 'warning'); return; }
-    if (!file) { toast('Select an Excel file', 'warning'); return; }
+    if (!file)     { toast('Select an Excel file', 'warning'); return; }
 
     await Admin.ensureAudit();
 
     const fd = new FormData();
-    fd.append('audit_id', State.activeAudit.id);
+    fd.append('audit_id',  State.activeAudit.id);
     fd.append('dept_name', deptName);
     fd.append('qty_column', qtyCol || '');
     fd.append('file', file);
@@ -616,7 +683,11 @@ const Admin = {
       const res = await API.form('/api/departments/import', fd);
       toast(`✅ ${res.message}`, 'success');
       Modals.close('importModal');
-      await App.loadDepartments();
+      // Reload departments
+      const depts = await API.get(`/api/departments/audit/${State.activeAudit.id}`);
+      State.departments = depts;
+      Dashboard.render();
+      Audit.renderDeptChips();
     } catch(e) {
       toast('Import failed', 'error');
     } finally {
@@ -624,19 +695,23 @@ const Admin = {
     }
   },
 
-  // Preview columns when file is selected
-  async previewColumns() {
+  exportDept() {
+    if (!State.activeDeptId) {
+      toast('Go to Audit tab and select a department first', 'warning');
+      return;
+    }
+    window.location.href = `/api/stock/${State.activeDeptId}/export`;
+  },
+
+  previewColumns() {
     const file = document.getElementById('importFile').files[0];
     if (!file) return;
-    // Read first row locally using FileReader + basic parse
-    // For now just show filename
     document.getElementById('importQtyField').style.display = 'block';
-    document.getElementById('importPreview').style.display = 'block';
+    document.getElementById('importPreview').style.display  = 'block';
     document.getElementById('importPreviewText').textContent = `📄 ${file.name}`;
   }
 };
 
-// Wire up file input preview
 document.addEventListener('DOMContentLoaded', () => {
   const importFile = document.getElementById('importFile');
   if (importFile) importFile.addEventListener('change', Admin.previewColumns);
@@ -646,14 +721,15 @@ document.addEventListener('DOMContentLoaded', () => {
 // MODALS
 // ══════════════════════════════════════════════════════
 const Modals = {
-  open(id) { document.getElementById(id).classList.add('open'); },
+  open(id)  { document.getElementById(id).classList.add('open'); },
   close(id) { document.getElementById(id).classList.remove('open'); },
 
   openImport() {
+    if (!State.isAdmin) { toast('Admin access required', 'error'); return; }
     document.getElementById('importDeptName').value = '';
-    document.getElementById('importFile').value = '';
+    document.getElementById('importFile').value     = '';
     document.getElementById('importQtyField').style.display = 'none';
-    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('importPreview').style.display  = 'none';
     Modals.open('importModal');
   },
 
@@ -661,8 +737,7 @@ const Modals = {
     const dept = Audit.getDept();
     if (!dept) { toast('Select a department first', 'warning'); return; }
     const prefs = Audit.getFilterPrefs();
-    const list = document.getElementById('filterToggleList');
-    list.innerHTML = dept.columns.map(col => `
+    document.getElementById('filterToggleList').innerHTML = dept.columns.map(col => `
       <div class="filter-toggle-item">
         <span class="toggle-label">${col}</span>
         <label class="toggle">
@@ -675,7 +750,6 @@ const Modals = {
   },
 
   closeStock(itemId) {
-    // Unlock item
     API.patch(`/api/stock/${itemId}/edit-lock`, { user_name: State.user, action: 'unlock' });
     Modals.close('stockModal');
   }
