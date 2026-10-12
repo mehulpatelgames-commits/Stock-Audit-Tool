@@ -4,6 +4,19 @@ from sqlalchemy.sql import func
 from database import Base
 
 
+class AppUser(Base):
+    """Staff members who can log in — managed by Admin"""
+    __tablename__ = "app_users"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    name       = Column(String, nullable=False)
+    username   = Column(String, nullable=False, unique=True, index=True)
+    password   = Column(String, nullable=False, default="123")
+    is_admin   = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+
 class Audit(Base):
     """A single stock audit session (e.g. Q3 2026 Audit)"""
     __tablename__ = "audits"
@@ -58,18 +71,21 @@ class StockItem(Base):
     edit_started_at = Column(DateTime(timezone=True), nullable=True)
 
     department = relationship("Department", back_populates="stock_items")
+    photos     = relationship("PhotoLog",   back_populates="stock_item")
 
 
 class PhotoLog(Base):
-    """A photo taken during audit, uploaded to Google Drive"""
+    """A photo taken during audit, uploaded to Google Drive or stored locally"""
     __tablename__ = "photo_log"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id            = Column(Integer, primary_key=True, index=True)
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
-    file_url = Column(String, nullable=False)
-    file_name = Column(String)
-    uploaded_by = Column(String, nullable=False)
-    remark = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    stock_item_id = Column(Integer, ForeignKey("stock_items.id"), nullable=True)  # linked stock entry
+    file_url      = Column(String, nullable=False)   # local /static/uploads/... or Drive link
+    file_name     = Column(String)
+    uploaded_by   = Column(String, nullable=False)
+    remark        = Column(Text, nullable=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
     department = relationship("Department", back_populates="photo_logs")
+    stock_item = relationship("StockItem",  back_populates="photos")

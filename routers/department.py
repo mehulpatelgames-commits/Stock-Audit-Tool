@@ -5,6 +5,7 @@ from database import get_db
 from models import Department, StockItem
 from schemas import DepartmentOut, FilterColumnsUpdate
 from services.excel import parse_excel
+from typing import Optional
 
 router = APIRouter(prefix="/api/departments", tags=["departments"])
 
@@ -38,7 +39,7 @@ async def list_departments(audit_id: int, db: AsyncSession = Depends(get_db)):
 async def import_department(
     audit_id: int = Form(...),
     dept_name: str = Form(...),
-    qty_column: str = Form(...),
+    qty_column: Optional[str] = Form(default=""),   # optional — empty means no mgmt qty
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db)
 ):
@@ -66,12 +67,21 @@ async def import_department(
     db.add(dept)
     await db.flush()
 
+    def to_float(val):
+        """Convert qty value to float or None — never empty string."""
+        if val is None or val == '':
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
     # Bulk insert stock items
     items = [
         StockItem(
             department_id=dept.id,
             data=row,
-            management_qty=row.get(qty_column)
+            management_qty=to_float(row.get(qty_column)) if qty_column else None
         )
         for row in rows
     ]
@@ -99,11 +109,16 @@ async def update_filter_columns(dept_id: int, body: FilterColumnsUpdate, db: Asy
 
 @router.delete("/{dept_id}")
 async def delete_department(dept_id: int, db: AsyncSession = Depends(get_db)):
-    """Admin discards a department's imported data"""
+    """Admin removes a department and its sheet data to reduce database load"""
     result = await db.execute(select(Department).where(Department.id == dept_id))
     dept = result.scalars().first()
     if not dept:
         raise HTTPException(status_code=404, detail="Department not found")
+    
+    # Delete associated photo logs and stock items
+    from models import PhotoLog
+    await db.execute(delete(PhotoLog).where(PhotoLog.department_id == dept_id))
+    await db.execute(delete(StockItem).where(StockItem.department_id == dept_id))
     await db.delete(dept)
     await db.commit()
-    return {"message": "Department deleted"}
+    return {"message": f"Department '{dept.name}' and all associated stock data removed successfully"}

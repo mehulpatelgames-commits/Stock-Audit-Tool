@@ -22,7 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from pathlib import Path
+
+# Ensure uploads directory exists (for local photo storage)
+Path("static/uploads").mkdir(parents=True, exist_ok=True)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # Include all routers
 app.include_router(auth.router)

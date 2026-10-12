@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>PIL Stock Audit</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
 
@@ -26,15 +26,20 @@
     <div class="login-title">PIL Stock Audit</div>
     <div class="login-sub">Physical Verification Tool</div>
 
-    <!-- Step 1: Name -->
+    <!-- Step 1: User ID and Password Login -->
     <div id="loginStep1">
       <div class="form-group">
-        <label>Select Your Name</label>
-        <select id="userSelect">
-          <option value="">-- Select --</option>
-        </select>
+        <label>User ID / Username</label>
+        <input type="text" id="loginUsername" placeholder="e.g. admin or mehulsurani" autocomplete="username">
       </div>
-      <button class="btn btn-primary" onclick="App.loginStep1()">Continue →</button>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" onclick="App.loginStep1()">Login →</button>
+      <div style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:12px;">
+        Default admin: <b>admin</b> | pass: <b>123</b>
+      </div>
     </div>
 
     <!-- Step 2: Department (non-admin only) -->
@@ -43,7 +48,7 @@
         <button onclick="App.backToStep1()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--primary);">←</button>
         <div>
           <div style="font-weight:700;" id="loginNameDisplay"></div>
-          <div style="font-size:13px;color:var(--text-muted);">Select your department</div>
+          <div style="font-size:13px;color:var(--text-muted);">Select your department for stock verification</div>
         </div>
       </div>
       <div id="deptSelectList">
@@ -75,7 +80,15 @@
 
   <!-- ── DASHBOARD PAGE ─────────────────────────── -->
   <div class="page active" id="pageDashboard">
-    <div class="section-title" style="margin-top:4px;" id="dashSectionTitle">Department</div>
+
+    <!-- Dashboard header row: title + refresh -->
+    <div class="dash-header-row">
+      <div class="section-title" style="margin:0;" id="dashSectionTitle">Departments</div>
+      <button class="refresh-btn" onclick="Dashboard.refresh()" title="Refresh all departments">
+        🔄 Refresh
+      </button>
+    </div>
+
     <div id="deptList">
       <div class="empty-state">
         <div class="empty-icon">📂</div>
@@ -90,6 +103,35 @@
       <button class="btn btn-primary" onclick="Modals.openImport()">📤 Import Excel</button>
       <div class="mt-8"></div>
       <button class="btn btn-outline" onclick="Admin.exportDept()">📥 Export Report</button>
+
+      <!-- Staff Management -->
+      <div class="divider"></div>
+      <div class="section-title">👥 Team &amp; Role Management</div>
+      <div class="text-muted" style="margin-bottom:10px; font-size:13px;">
+        Create or remove team members and assign roles (Admin / Team).
+      </div>
+
+      <!-- Add new staff -->
+      <div class="staff-add-card">
+        <div class="form-group" style="margin-bottom:8px;">
+          <input type="text" id="newStaffName" placeholder="Full Name (e.g. Rahul Sharma)">
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <input type="text" id="newStaffUsername" placeholder="User ID (e.g. rahul)" style="flex:1;">
+          <input type="password" id="newStaffPassword" placeholder="Password" style="flex:1;" value="123">
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label class="admin-toggle">
+            <input type="checkbox" id="newStaffAdmin"> <b>Make Admin</b> (full access)
+          </label>
+          <button class="btn btn-success" style="width:auto; padding:8px 18px; min-height:40px;" onclick="Staff.add()">➕ Add Member</button>
+        </div>
+      </div>
+
+      <!-- Staff list -->
+      <div id="staffList" style="margin-top:12px;">
+        <div class="text-muted" style="text-align:center;padding:12px">Loading...</div>
+      </div>
     </div>
   </div>
 
@@ -115,45 +157,43 @@
     <div id="stockList"></div>
   </div>
 
-  <!-- ── ADD NEW STOCK PAGE ─────────────────────── -->
+  <!-- ── ADD NEW STOCK PAGE (Extra Stock + Photo combined) ── -->
   <div class="page" id="pageAdd">
     <div class="add-form">
-      <div class="section-title">Add New Stock Item</div>
-      <div id="addFormFields">
-        <div class="empty-state">
-          <p>Loading fields...</p>
+      <div class="section-title">📦 Extra Stock Entry</div>
+      <div class="text-muted" style="font-size:13px; margin-bottom:16px;">
+        Found stock not in management sheet? Add it here with a photo.
+      </div>
+
+      <!-- Photo capture — at top -->
+      <div class="form-group">
+        <label>📸 Stock Photo <span style="font-weight:400;color:var(--text-muted)">(recommended)</span></label>
+        <div class="photo-upload-area" id="extraPhotoArea" onclick="document.getElementById('extraPhotoInput').click()" style="margin-bottom:0;">
+          <div class="photo-icon" id="extraPhotoIcon">📷</div>
+          <div class="photo-label" id="extraPhotoLabel">Tap to take photo or choose from gallery</div>
+          <img class="photo-preview" id="extraPhotoPreview" style="display:none;">
         </div>
+        <input type="file" id="extraPhotoInput" accept="image/*" capture="environment"
+               style="display:none" onchange="ExtraStock.onPhotoSelect(this)">
       </div>
+
+      <!-- Stock detail fields (from dept columns) -->
+      <div id="addFormFields">
+        <div class="empty-state"><p>Loading fields...</p></div>
+      </div>
+
+      <div class="form-group">
+        <label>Remark <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+        <input type="text" id="extraRemark" placeholder="Any notes about this extra stock?">
+      </div>
+
       <div class="mt-12" id="addSubmitBtn" style="display:none;">
-        <button class="btn btn-success" onclick="Add.submit()">✅ Add Entry</button>
+        <button class="btn btn-success" onclick="ExtraStock.submit()">✅ Submit Extra Stock</button>
       </div>
     </div>
   </div>
 
-  <!-- ── PHOTO PAGE ──────────────────────────────── -->
-  <div class="page" id="pagePhoto">
-    <div class="admin-card">
-      <div class="admin-card-title">📸 Inventory Photo</div>
-
-      <div class="photo-upload-area" id="photoArea" onclick="document.getElementById('photoFileInput').click()">
-        <div class="photo-icon">📷</div>
-        <div class="photo-label">Tap to take photo or choose from gallery</div>
-        <img class="photo-preview" id="photoPreview">
-      </div>
-
-      <input type="file" id="photoFileInput" accept="image/*" capture="environment"
-             style="display:none" onchange="Photo.onFileSelect(this)">
-
-      <div class="form-group mt-8">
-        <label>Remark</label>
-        <input type="text" id="photoRemark" placeholder="Enter remark (optional)">
-      </div>
-
-      <button class="btn btn-accent" onclick="Photo.upload()">⬆️ Upload Photo</button>
-    </div>
-  </div>
-
-  <!-- ── BOTTOM NAV ──────────────────────────────── -->
+  <!-- ── BOTTOM NAV (3 items) ──────────────────────── -->
   <div class="bottom-nav">
     <button class="nav-item active" id="nav-dashboard" onclick="App.showPage('dashboard')">
       <span class="nav-icon">🏠</span>
@@ -165,11 +205,7 @@
     </button>
     <button class="nav-item" id="nav-add" onclick="App.showPage('add')">
       <span class="nav-icon">➕</span>
-      <span>Add</span>
-    </button>
-    <button class="nav-item" id="nav-photo" onclick="App.showPage('photo')">
-      <span class="nav-icon">📸</span>
-      <span>Photo</span>
+      <span>Extra Stock</span>
     </button>
   </div>
 
@@ -195,8 +231,9 @@
 
     <div id="importQtyField" style="display:none;">
       <div class="form-group">
-        <label>Which column is the Management Qty?</label>
-        <select id="importQtyColumn"></select>
+        <label>Management Qty Column Name <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+        <input type="text" id="importQtyColumn" placeholder="e.g. Net, Qty, Weight — leave blank if none">
+        <div id="importColumnsHint" style="font-size:12px; color:var(--text-muted); margin-top:4px;"></div>
       </div>
     </div>
 
@@ -235,6 +272,7 @@
   <div class="modal-sheet" id="stockModalContent"></div>
 </div>
 
-<script src="/static/app.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mini.min.js"></script>
+<script src="/static/app.js?v=4"></script>
 </body>
 </html>

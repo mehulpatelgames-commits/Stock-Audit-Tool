@@ -8,3 +8,5 @@ venv/
 dist/
 .DS_Store
 *.log
+static/uploads/*
+!static/uploads/.gitkeep

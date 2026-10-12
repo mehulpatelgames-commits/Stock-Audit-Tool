@@ -289,6 +289,42 @@ label {
 .stat-pill.pending  { background: #FFF8E1; color: var(--warning); }
 .stat-pill.diff     { background: #FFEBEE; color: var(--danger); }
 
+/* Admin actions inside dept card */
+.dept-card-admin-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.btn-card-action {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+.btn-card-action:active {
+  transform: scale(0.97);
+}
+.btn-card-action.export {
+  background: #E3F2FD;
+  color: var(--primary);
+  border-color: #BBDEFB;
+}
+.btn-card-action.remove {
+  background: #FFEBEE;
+  color: var(--danger);
+  border-color: #FFCDD2;
+}
+
 /* ══════════════════════════════════════════════════
    AUDIT (STOCK LIST)
 ══════════════════════════════════════════════════ */
@@ -685,3 +721,95 @@ label {
 .text-center { text-align: center; }
 .text-muted { color: var(--text-muted); font-size: 13px; }
 .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* ── DASHBOARD HEADER ROW ────────────────────────── */
+.dash-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 0 12px;
+}
+.refresh-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.refresh-btn:active { opacity: 0.8; transform: scale(0.97); }
+
+/* ── STATUS BADGES ───────────────────────────────── */
+.status-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+}
+.status-badge.ready   { background: #C8E6C9; color: #1B5E20; }
+.status-badge.working { background: #FFF3E0; color: #E65100; }
+
+/* Progress bar done state — green */
+.progress-fill.done { background: #2E7D32; }
+
+/* ── STAFF MANAGEMENT ────────────────────────────── */
+.staff-add-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.staff-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.admin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.staff-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+.staff-info { display: flex; align-items: center; gap: 8px; }
+.staff-name { font-weight: 600; font-size: 14px; }
+.staff-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.3px;
+}
+.staff-badge.admin { background: #E3F2FD; color: var(--primary); }
+.staff-badge.team  { background: #F3E5F5; color: #6A1B9A; }
+.staff-actions { display: flex; gap: 6px; }
+.btn-icon {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.btn-icon.danger { border-color: #FFCDD2; color: var(--danger); }
+.btn-icon:active { opacity: 0.7; }

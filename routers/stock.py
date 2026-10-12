@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import func
 from database import get_db
 from models import StockItem, Department
@@ -16,8 +17,9 @@ router = APIRouter(prefix="/api/stock", tags=["stock"])
 
 class AddItemRequest(BaseModel):
     department_id: int
-    data: Dict[str, Any]
-    verified_by: Optional[str] = None
+    data:          Dict[str, Any]
+    remark:        Optional[str] = None
+    verified_by:   Optional[str] = None
 
 
 # Edit lock timeout in seconds — if user doesn't unlock in 5 min, auto-release
@@ -77,7 +79,6 @@ async def edit_lock(item_id: int, body: EditLockRequest, db: AsyncSession = Depe
         raise HTTPException(status_code=404, detail="Item not found")
 
     if body.action == "lock":
-        # Check if already locked by someone else (and not timed out)
         if item.being_edited_by and item.being_edited_by != body.user_name:
             if item.edit_started_at:
                 elapsed = (datetime.now(timezone.utc) - item.edit_started_at).total_seconds()
@@ -107,7 +108,9 @@ async def export_stock(dept_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Department not found")
 
     items_result = await db.execute(
-        select(StockItem).where(StockItem.department_id == dept_id)
+        select(StockItem)
+        .where(StockItem.department_id == dept_id)
+        .options(selectinload(StockItem.photos))   # eagerly load photo links
     )
     items = items_result.scalars().all()
 
@@ -123,21 +126,28 @@ async def export_stock(dept_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/add")
 async def add_stock_item(body: AddItemRequest, db: AsyncSession = Depends(get_db)):
-    """Add a single new stock item to a department"""
+    """Add an extra stock item (not in management sheet) with optional remark"""
     dept_result = await db.execute(select(Department).where(Department.id == body.department_id))
     dept = dept_result.scalars().first()
     if not dept:
         raise HTTPException(status_code=404, detail="Department not found")
 
+    # Mark extra stock clearly — management_qty stays None to distinguish from imported items
+    remark = body.remark or ""
+    if "EXTRA STOCK" not in remark.upper():
+        remark = f"[EXTRA STOCK] {remark}".strip().rstrip("]").strip() if not remark else f"[EXTRA STOCK] {remark}"
+
     item = StockItem(
-        department_id=body.department_id,
-        data=body.data,
-        management_qty=None,
-        verified=True if body.verified_by else False,
-        verified_by=body.verified_by,
-        verified_at=datetime.now(timezone.utc) if body.verified_by else None
+        department_id = body.department_id,
+        data          = body.data,
+        management_qty= None,           # None = extra stock marker
+        physical_qty  = None,           # not applicable for extra stock
+        remark        = remark,
+        verified      = True,           # extra stock is auto-verified (team found it)
+        verified_by   = body.verified_by,
+        verified_at   = datetime.now(timezone.utc) if body.verified_by else None
     )
     db.add(item)
     await db.commit()
     await db.refresh(item)
-    return {"message": "Added", "id": item.id}
+    return {"message": "Extra stock added", "id": item.id}

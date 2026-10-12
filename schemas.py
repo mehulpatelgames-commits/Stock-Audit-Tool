@@ -5,10 +5,12 @@ from datetime import datetime
 
 # ── AUTH ──────────────────────────────────────────────
 class LoginRequest(BaseModel):
-    name: str
+    username: str
+    password: str
 
 class LoginResponse(BaseModel):
     name: str
+    username: str
     is_admin: bool
 
 
