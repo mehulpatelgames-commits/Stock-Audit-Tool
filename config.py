@@ -3,7 +3,7 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
+    DATABASE_URL: str = ""
     SECRET_KEY: str = "dev-secret-key"
     ADMIN_NAMES: str = "Admin"
     GOOGLE_SA_JSON: str = ""
@@ -14,15 +14,31 @@ class Settings(BaseSettings):
         import os
         import re
 
-        # Read directly from env or field
-        raw = os.environ.get("DATABASE_URL") or self.DATABASE_URL or ""
+        # Read from any available PostgreSQL environment variable provided by Railway/hosting
+        raw = (
+            os.environ.get("DATABASE_URL")
+            or os.environ.get("DATABASE_PRIVATE_URL")
+            or os.environ.get("DATABASE_PUBLIC_URL")
+            or os.environ.get("POSTGRES_URL")
+            or self.DATABASE_URL
+            or ""
+        )
+
+        # If not provided as a full URL, assemble from individual PG variables if available
+        if not raw and os.environ.get("PGHOST"):
+            user = os.environ.get("PGUSER", "postgres")
+            password = os.environ.get("PGPASSWORD", "")
+            host = os.environ.get("PGHOST", "localhost")
+            port = os.environ.get("PGPORT", "5432")
+            dbname = os.environ.get("PGDATABASE", "railway")
+            raw = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+
         url = str(raw).strip().strip("'\"")
 
-        print(f"[DATABASE_CONFIG] Raw DATABASE_URL length: {len(url)}, starts with: {url[:20] if len(url)>=20 else url}")
+        print(f"[DATABASE_CONFIG] Resolved URL starts with: {url[:25] if len(url)>=25 else url}")
 
-        # If empty or not set, raise clear informative error
         if not url:
-            raise ValueError("[DATABASE_CONFIG] DATABASE_URL environment variable is empty or not set.")
+            raise ValueError("[DATABASE_CONFIG] No database connection string found in environment.")
 
         # If literal template variable was passed instead of resolved value
         if "${{" in url or "$Postgres" in url:
