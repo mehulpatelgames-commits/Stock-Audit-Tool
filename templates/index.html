@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>PIL Stock Audit</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=5">
+  <link rel="stylesheet" href="/static/style.css?v=6">
 </head>
 <body>
 
@@ -82,12 +82,17 @@
   <!-- ── DASHBOARD PAGE ─────────────────────────── -->
   <div class="page active" id="pageDashboard">
 
-    <!-- Dashboard header row: title + refresh -->
+    <!-- Dashboard header row: title + switch dept + refresh -->
     <div class="dash-header-row">
       <div class="section-title" style="margin:0;" id="dashSectionTitle">Departments</div>
-      <button class="refresh-btn" onclick="Dashboard.refresh()" title="Refresh all departments">
-        🔄 Refresh
-      </button>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="btn btn-outline" id="btnSwitchDept" style="display:none; padding:6px 12px; font-size:12px; font-weight:700; min-height:36px; border-radius:10px;" onclick="App.showDeptSelectionModal()">
+          🔄 Switch Dept
+        </button>
+        <button class="refresh-btn" onclick="Dashboard.refresh()" title="Refresh all departments">
+          🔄 Refresh
+        </button>
+      </div>
     </div>
 
     <div id="deptList">
@@ -139,6 +144,20 @@
   <!-- ── AUDIT PAGE ──────────────────────────────── -->
   <div class="page" id="pageAudit">
 
+    <!-- Top Sub-Header with Back Button -->
+    <div class="page-sub-header">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="header-back-btn" onclick="App.showPage('dashboard')" title="Back to Departments">←</button>
+        <div>
+          <div class="page-sub-title" id="auditDeptTitle">Department Audit</div>
+          <div class="page-sub-desc" id="auditDeptSubtitle">General Physical Verification</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button class="header-action-btn" onclick="Audit.loadStock()" title="Refresh Stock">🔄</button>
+      </div>
+    </div>
+
     <!-- Dept chips — Admin only -->
     <div class="dept-selector" id="deptChips" style="display:none;"></div>
 
@@ -160,6 +179,15 @@
 
   <!-- ── ADD NEW STOCK PAGE (Extra Stock + Photo combined) ── -->
   <div class="page" id="pageAdd">
+    <div class="page-sub-header" style="margin-bottom:12px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="header-back-btn" onclick="App.showPage('dashboard')" title="Back to Departments">←</button>
+        <div>
+          <div class="page-sub-title">Extra Stock Entry</div>
+          <div class="page-sub-desc">Found stock not in management sheet</div>
+        </div>
+      </div>
+    </div>
     <div class="add-form">
       <div class="section-title">📦 Extra Stock Entry</div>
       <div class="text-muted" style="font-size:13px; margin-bottom:16px;">
@@ -618,7 +646,23 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════
+     MODAL: SWITCH DEPARTMENT
+══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="switchDeptModal">
+  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔄 Switch Department</div>
+    <div class="text-muted" style="margin-bottom:14px; font-size:13px;">
+      Select the department you want to audit:
+    </div>
+    <div id="switchDeptList"></div>
+    <div class="mt-8"></div>
+    <button class="btn btn-ghost" onclick="Modals.close('switchDeptModal')">Cancel</button>
+  </div>
+</div>
+
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mini.min.js"></script>
-<script src="/static/app.js?v=8"></script>
+<script src="/static/app.js?v=10"></script>
 </body>
 </html>

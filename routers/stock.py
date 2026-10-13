@@ -56,6 +56,9 @@ async def get_stock(
 @router.patch("/{item_id}/update")
 async def update_stock(item_id: int, body: StockUpdateRequest, db: AsyncSession = Depends(get_db)):
     """Save verification result for a stock item"""
+    if body.physical_qty is not None and body.physical_qty < 0:
+        raise HTTPException(status_code=400, detail="Physical quantity cannot be negative")
+
     result = await db.execute(select(StockItem).where(StockItem.id == item_id))
     item = result.scalars().first()
     if not item:
@@ -363,6 +366,9 @@ async def get_fg_order_detail(item_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/fg/order/{item_id}/verify")
 async def add_fg_batch(item_id: int, req: FGBatchAddRequest, db: AsyncSession = Depends(get_db)):
     """Pass physical verification batch entry for a Finish Goods order"""
+    if req.bales < 0 or req.pcs_per_bale < 0 or req.loose_pcs < 0:
+        raise HTTPException(status_code=400, detail="Bales and loose pieces cannot be negative")
+
     total_pcs = (req.bales * req.pcs_per_bale) + req.loose_pcs
     if total_pcs <= 0:
         raise HTTPException(status_code=400, detail="Total verified pcs must be greater than 0")

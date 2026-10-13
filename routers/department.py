@@ -70,6 +70,9 @@ async def import_department(
     )
     existing_dept = existing.scalars().first()
     if existing_dept:
+        from models import PhotoLog, StockBatch
+        await db.execute(delete(StockBatch).where(StockBatch.department_id == existing_dept.id))
+        await db.execute(delete(PhotoLog).where(PhotoLog.department_id == existing_dept.id))
         await db.execute(delete(StockItem).where(StockItem.department_id == existing_dept.id))
         await db.delete(existing_dept)
         await db.commit()
@@ -143,8 +146,9 @@ async def delete_department(dept_id: int, db: AsyncSession = Depends(get_db)):
     if not dept:
         raise HTTPException(status_code=404, detail="Department not found")
     
-    # Delete associated photo logs and stock items
-    from models import PhotoLog
+    # Delete associated photo logs, batches, and stock items
+    from models import PhotoLog, StockBatch
+    await db.execute(delete(StockBatch).where(StockBatch.department_id == dept_id))
     await db.execute(delete(PhotoLog).where(PhotoLog.department_id == dept_id))
     await db.execute(delete(StockItem).where(StockItem.department_id == dept_id))
     await db.delete(dept)

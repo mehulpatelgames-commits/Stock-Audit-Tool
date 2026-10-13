@@ -42,8 +42,11 @@ def generate_export(dept: Department, items: List[StockItem], base_url: str = ""
 
     def _get_photo_url(item: StockItem) -> str:
         """Return the first photo URL linked to this stock item, or ''."""
-        if item.photos:
-            return item.photos[0].file_url or ""
+        try:
+            if "photos" in item.__dict__ and item.photos:
+                return item.photos[0].file_url or ""
+        except Exception:
+            pass
         return ""
 
     def write_header_row(row_idx: int):
@@ -169,7 +172,7 @@ def generate_export(dept: Department, items: List[StockItem], base_url: str = ""
         if i.verified and i.physical_qty is not None
         and i.physical_qty != (i.management_qty or 0)
     )
-    with_photos = sum(1 for i in items if i.photos)
+    with_photos = sum(1 for i in items if bool(_get_photo_url(i)))
 
     ws.cell(row=summary_row,     column=1, value="SUMMARY").font = Font(bold=True, size=12)
     ws.cell(row=summary_row + 1, column=1, value=f"Management Stock Items : {total}")

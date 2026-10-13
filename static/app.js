@@ -163,11 +163,13 @@ const App = {
     // Topbar
     document.getElementById('topbarUser').textContent = State.user;
 
+    const btnSwitch = document.getElementById('btnSwitchDept');
     if (State.isAdmin) {
       document.getElementById('topbarTitle').textContent    = State.activeAudit?.name || 'Stock Audit';
       document.getElementById('adminSection').style.display = 'block';
       document.getElementById('deptChips').style.display    = 'flex';
       document.getElementById('dashSectionTitle').textContent = 'All Departments';
+      if (btnSwitch) btnSwitch.style.display = 'none';
       Audit.renderDeptChips();
     } else {
       const dept = State.departments.find(d => d.id === deptId);
@@ -175,6 +177,7 @@ const App = {
       document.getElementById('adminSection').style.display = 'none';
       document.getElementById('deptChips').style.display    = 'none';
       document.getElementById('dashSectionTitle').textContent = 'My Department';
+      if (btnSwitch) btnSwitch.style.display = 'inline-flex';
     }
 
     if (!State.isAdmin && deptId) {
@@ -196,6 +199,65 @@ const App = {
     if (State.activeDeptId) {
       Audit.loadStock();
     }
+  },
+
+  showDeptSelectionModal() {
+    const container = document.getElementById('switchDeptList');
+    if (!container) return;
+    if (!State.departments.length) {
+      container.innerHTML = '<div class="empty-state"><p>No departments available.</p></div>';
+      Modals.open('switchDeptModal');
+      return;
+    }
+
+    container.innerHTML = State.departments.map(dept => {
+      const isCurrent = dept.id === State.lockedDeptId;
+      const isFG = dept.verification_method === 'finish_goods';
+      const pct = dept.total_items ? Math.round((dept.verified_items / dept.total_items) * 100) : 0;
+      return `
+        <div class="dept-card" onclick="App.selectAndSwitchDept(${dept.id})" style="margin-bottom:10px; cursor:pointer; ${isCurrent ? 'border:2px solid var(--primary); background:#f0f7ff;' : ''}">
+          <div class="dept-card-header">
+            <div>
+              <div class="dept-name">
+                ${dept.name}
+                ${isFG ? '<span style="font-size:10px; background:#eff6ff; color:#2563eb; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;">SPECIAL METHOD</span>' : ''}
+                ${isCurrent ? '<span style="font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-weight:700; margin-left:6px;">CURRENT</span>' : ''}
+              </div>
+              <div class="dept-count">${dept.total_items || 0} items · ${dept.verified_items || 0} verified</div>
+            </div>
+            <div style="font-size:18px; font-weight:700; color:var(--primary)">${pct}%</div>
+          </div>
+          <div class="progress-bar" style="margin-top:6px;">
+            <div class="progress-fill" style="width:${pct}%"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    Modals.open('switchDeptModal');
+  },
+
+  selectAndSwitchDept(deptId) {
+    Modals.close('switchDeptModal');
+    State.lockedDeptId = deptId;
+    State.activeDeptId = deptId;
+
+    const dept = State.departments.find(d => d.id === deptId);
+    const deptName = dept ? dept.name : 'Stock Audit';
+
+    if (!State.isAdmin) {
+      document.getElementById('topbarTitle').textContent = deptName;
+    }
+
+    Dashboard.render();
+    ExtraStock.populateForm();
+
+    if (dept && dept.verification_method === 'finish_goods') {
+      FG.open(deptId);
+    } else {
+      Audit.loadStock();
+      App.showPage('audit');
+    }
+    toast(`Switched to ${deptName}`, 'success');
   },
 
   async loadAudit() {
@@ -254,7 +316,13 @@ const App = {
     const navEl = document.getElementById(`nav-${page}`);
     if (navEl) navEl.classList.add('active');
 
-    if (page === 'audit') {
+    if (page === 'dashboard') {
+      if (!State.isAdmin) {
+        const curDept = State.departments.find(d => d.id === State.lockedDeptId);
+        document.getElementById('topbarTitle').textContent = curDept ? curDept.name : 'Stock Audit';
+      }
+      Dashboard.render();
+    } else if (page === 'audit') {
       Audit.renderDynamicFilters();
     }
   }
@@ -513,10 +581,17 @@ const Audit = {
 
   async loadStock() {
     if (!State.activeDeptId) return;
+    const dept = Audit.getDept();
+    const titleEl = document.getElementById('auditDeptTitle');
+    const subEl = document.getElementById('auditDeptSubtitle');
+    if (titleEl && dept) titleEl.textContent = dept.name;
+    if (subEl && dept) subEl.textContent = `${dept.total_items || 0} items · General Physical Verification`;
+
     showSpinner();
     try {
       const items = await API.get(`/api/stock/${State.activeDeptId}`);
       State.stockItems = items;
+      if (subEl && dept) subEl.textContent = `${items.length} items · General Physical Verification`;
       document.getElementById('globalSearch').value = '';
       Audit.renderDynamicFilters();
       Audit.applyFilter();
@@ -700,25 +775,51 @@ const Audit = {
 
       <div class="form-group">
         <label>Physical Qty (you counted)</label>
-        <input type="number" id="modalPhyQty" value="${item.physical_qty ?? ''}"
-               placeholder="Enter physical count" inputmode="decimal">
+        <input type="number" id="modalPhyQty" value="${item.physical_qty ?? ''}" min="0" step="any"
+               placeholder="Enter physical count" inputmode="decimal"
+               oninput="Audit.onPhyQtyInput()"
+               onkeydown="if(event.key==='Enter') Audit.saveVerification(${item.id})">
       </div>
 
       <div class="form-group">
         <label>Remark (optional)</label>
-        <input type="text" id="modalRemark" value="${item.remark || ''}" placeholder="Any notes?">
+        <input type="text" id="modalRemark" value="${item.remark || ''}" placeholder="Any notes?"
+               onkeydown="if(event.key==='Enter') Audit.saveVerification(${item.id})">
       </div>
 
-      <button class="btn btn-primary" style="margin-bottom:8px;"
-              onclick="Audit.sameQty(${item.id}, ${item.management_qty ?? 0})">
-        ✅ Same as Management (${item.management_qty ?? '—'})
-      </button>
-      <button class="btn btn-success" onclick="Audit.saveVerification(${item.id})">
+      ${item.management_qty != null ? `
+        <button class="btn btn-primary" id="btnSameQty" style="margin-bottom:8px; transition:opacity 0.2s;"
+                onclick="Audit.sameQty(${item.id}, ${item.management_qty})">
+          ✅ Same as Management (${item.management_qty})
+        </button>
+      ` : ''}
+      <button class="btn btn-success" id="btnSaveCount" onclick="Audit.saveVerification(${item.id})">
         💾 Save My Count
       </button>
     `;
 
     document.getElementById('stockModal').classList.add('open');
+    Audit.onPhyQtyInput();
+  },
+
+  onPhyQtyInput() {
+    const el = document.getElementById('modalPhyQty');
+    const btnSame = document.getElementById('btnSameQty');
+    if (!el || !btnSame) return;
+    const hasValue = el.value.trim() !== '';
+    if (hasValue) {
+      btnSame.disabled = true;
+      btnSame.style.opacity = '0.35';
+      btnSame.style.pointerEvents = 'none';
+      btnSame.style.cursor = 'not-allowed';
+      btnSame.title = "You have entered a physical count. Clear it to use 'Same as Management'";
+    } else {
+      btnSame.disabled = false;
+      btnSame.style.opacity = '1';
+      btnSame.style.pointerEvents = 'auto';
+      btnSame.style.cursor = 'pointer';
+      btnSame.title = "";
+    }
   },
 
   async sameQty(itemId, mgmtQty) {
@@ -727,14 +828,21 @@ const Audit = {
   },
 
   async saveVerification(itemId) {
-    const qty    = document.getElementById('modalPhyQty').value;
-    const remark = document.getElementById('modalRemark').value;
-    if (qty === '') { toast('Enter physical qty', 'warning'); return; }
+    const qtyInput = document.getElementById('modalPhyQty');
+    if (!qtyInput) return;
+    const qtyVal = qtyInput.value.trim();
+    if (qtyVal === '') { toast('Enter physical qty', 'warning'); return; }
+    const numQty = Number(qtyVal);
+    if (isNaN(numQty) || numQty < 0) {
+      toast('Please enter a valid positive quantity', 'warning');
+      return;
+    }
+    const remark = (document.getElementById('modalRemark')?.value || '').trim();
 
     showSpinner();
     try {
       await API.patch(`/api/stock/${itemId}/update`, {
-        physical_qty: Number(qty),
+        physical_qty: numQty,
         remark,
         verified_by: State.user
       });
