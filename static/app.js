@@ -1171,6 +1171,7 @@ const FG = {
   selectedItemId: null,
   selectedOrderData: null,
   currentFilterStatus: 'ALL',
+  ordersNeedReload: true,
 
   async open(deptId) {
     State.activeDeptId = deptId;
@@ -1193,12 +1194,12 @@ const FG = {
     if (!State.activeDeptId) return;
     showSpinner();
     try {
-      await FG.fetchSummary();
-      await FG.fetchParties();
+      const promises = [FG.fetchSummary(), FG.fetchParties()];
       if (FG.selectedPartyName) {
-        await FG.loadOrdersForParty(FG.selectedPartyName);
+        promises.push(FG.loadOrdersForParty(FG.selectedPartyName));
       }
-      await FG.loadAllOrdersCards();
+      await Promise.all(promises);
+      FG.ordersNeedReload = true;
     } catch (e) {
       console.error("FG refresh error:", e);
     } finally {
@@ -1515,27 +1516,32 @@ const FG = {
         remark: remark
       });
 
-      // Reload active order and summaries
-      await FG.loadOrderDetails(FG.selectedItemId);
-      await FG.fetchSummary();
-      await FG.fetchParties();
-      await FG.loadAllOrdersCards();
-
-      document.getElementById('fgInRemark').value = '';
-
-      // Populate & open physical inventory tag modal
-      document.getElementById('fgSuccEntryNo').textContent     = `#${resData.entry_no}`;
-      document.getElementById('fgSuccBalesText').textContent   = `${resData.bales} Bales` + (resData.loose_pcs > 0 ? ` + ${resData.loose_pcs} Loose` : '');
-      document.getElementById('fgSuccTotalPcsText').textContent = `(${(resData.total_pcs || 0).toLocaleString()} Pieces)`;
-      document.getElementById('fgSuccOrderParty').textContent   = `Order #${resData.order_no} • ${resData.party}`;
-      document.getElementById('fgSuccPhysicalTag').textContent   = `ENTRY #${resData.entry_no} — ${resData.bales} BALES`;
+      // ── 1. POPUP SUCCESS MODAL IMMEDIATELY! (Zero lag for floor auditor) ──
+      hideSpinner();
+      document.getElementById('fgSuccEntryNo').textContent      = `#${resData.entry_no}`;
+      document.getElementById('fgSuccBalesText').textContent    = `${resData.bales} Bales` + (resData.loose_pcs > 0 ? ` + ${resData.loose_pcs} Loose` : '');
+      document.getElementById('fgSuccTotalPcsText').textContent  = `(${(resData.total_pcs || 0).toLocaleString()} Pieces)`;
+      document.getElementById('fgSuccOrderParty').textContent    = `Order #${resData.order_no} • ${resData.party}`;
+      document.getElementById('fgSuccPhysicalTag').textContent    = `ENTRY #${resData.entry_no} — ${resData.bales} BALES`;
 
       Modals.open('fgSuccessModal');
 
+      // ── 2. Reset calculator inputs ──────────────────────
+      document.getElementById('fgInRemark').value = '';
+      document.getElementById('fgInBales').value = 0;
+      document.getElementById('fgInPcsPerBale').value = 0;
+      document.getElementById('fgInLoose').value = 0;
+      FG.updateLiveCalc();
+
+      // ── 3. Fast background sync of active order & stats ─
+      FG.ordersNeedReload = true;
+      await FG.loadOrderDetails(FG.selectedItemId);
+      FG.fetchSummary();
+      FG.fetchParties();
+
     } catch (err) {
-      toast(err.message || "Failed to submit batch", "error");
-    } finally {
       hideSpinner();
+      toast(err.message || "Failed to submit batch", "error");
     }
   },
 
@@ -1548,11 +1554,10 @@ const FG = {
       await API.del(`/api/stock/fg/batch/${batchId}`);
       toast(`Entry #${batchId} deleted`, "success");
 
-      if (FG.selectedItemId) await FG.loadOrderDetails(FG.selectedItemId);
-      await FG.fetchSummary();
-      await FG.fetchParties();
-      await FG.loadAllOrdersCards();
-      await FG.loadAuditLog();
+      FG.ordersNeedReload = true;
+      const tasks = [FG.fetchSummary(), FG.fetchParties(), FG.loadAuditLog()];
+      if (FG.selectedItemId) tasks.push(FG.loadOrderDetails(FG.selectedItemId));
+      await Promise.all(tasks);
 
     } catch (err) {
       toast(err.message || "Failed to delete entry", "error");
@@ -1671,13 +1676,11 @@ const FG = {
   // ── VIEW 2: ORDERS LIST (CARDS) ───────────────────────
   async loadAllOrdersCards() {
     try {
-      let combined = [];
-      for (const p of FG.currentParties) {
-        const ords = await API.get(`/api/stock/fg/${State.activeDeptId}/orders?party=${encodeURIComponent(p.party)}`);
-        combined = combined.concat(ords);
-      }
-      FG.allOrdersData = combined;
+      // Fast single API call fetching all orders across all parties at once
+      const ords = await API.get(`/api/stock/fg/${State.activeDeptId}/orders`);
+      FG.allOrdersData = Array.isArray(ords) ? ords : [];
       FG.renderOrdersCards();
+      FG.ordersNeedReload = false;
     } catch (err) {
       console.error("FG Orders cards error:", err);
     }
@@ -1760,6 +1763,9 @@ const FG = {
     document.getElementById('fgTabLog').classList.toggle('active', tab === 'log');
     document.getElementById('fgTabSummary').classList.toggle('active', tab === 'summary');
 
+    if (tab === 'orders' && (FG.ordersNeedReload || !FG.allOrdersData.length)) {
+      FG.loadAllOrdersCards();
+    }
     if (tab === 'log') {
       FG.loadAuditLog();
     }
