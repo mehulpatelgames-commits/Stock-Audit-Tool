@@ -577,6 +577,10 @@ const Audit = {
           <div class="data-value">${item.data[col] ?? '—'}</div>
         </div>`).join('');
 
+      const photoBadge = (item.photos && item.photos.length > 0)
+        ? `<span style="background:#EDE7F6; color:#5E35B1; font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px; margin-right:4px;">📷 Photo</span>`
+        : '';
+
       return `
         <div class="stock-card ${cardClass}" onclick="Audit.openStockModal(${idx})">
           <div class="stock-card-header">
@@ -584,7 +588,10 @@ const Audit = {
               <div class="stock-card-title">${item.data[cols[0]] || 'Item ' + (idx+1)}</div>
               <div class="stock-card-sub">${item.data[cols[1]] || ''}</div>
             </div>
-            <span class="status-badge ${badgeClass}">${badgeText}</span>
+            <div style="display:flex; align-items:center; gap:4px;">
+              ${photoBadge}
+              <span class="status-badge ${badgeClass}">${badgeText}</span>
+            </div>
           </div>
           ${item.being_edited_by && item.being_edited_by !== State.user
             ? `<div class="warning-banner">⚠️ Being edited by ${item.being_edited_by}</div>` : ''}
@@ -617,6 +624,23 @@ const Audit = {
 
     const diff = item.verified ? (item.physical_qty - (item.management_qty || 0)) : null;
 
+    const photoHTML = (item.photos && item.photos.length > 0)
+      ? `<div style="margin: 14px 0 8px;">
+           <div style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">📷 Attached Photo</div>
+           ${item.photos.map(p => `
+             <div style="border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--bg); margin-bottom:8px;">
+               <a href="${p.file_url}" target="_blank" rel="noopener">
+                 <img src="${p.file_url}" alt="Stock photo" style="width:100%; max-height:220px; object-fit:contain; display:block; background:#000;">
+               </a>
+               <div style="padding:6px 10px; font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between;">
+                 <span>${p.uploaded_by ? 'By ' + p.uploaded_by : ''}</span>
+                 <a href="${p.file_url}" target="_blank" rel="noopener" style="color:var(--primary); font-weight:600; text-decoration:none;">🔍 Open Full Size</a>
+               </div>
+             </div>
+           `).join('')}
+         </div>`
+      : '';
+
     document.getElementById('stockModalContent').innerHTML = `
       <div class="modal-handle"></div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
@@ -625,6 +649,7 @@ const Audit = {
       </div>
 
       <div class="stock-data-grid">${allDataRows}</div>
+      ${photoHTML}
       <div class="divider"></div>
 
       <div class="mgmt-qty-row">

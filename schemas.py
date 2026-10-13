@@ -48,6 +48,16 @@ class DepartmentOut(BaseModel):
 
 
 # ── STOCK ITEM ────────────────────────────────────────
+class PhotoOut(BaseModel):
+    id: int
+    file_url: str
+    file_name: Optional[str] = None
+    remark: Optional[str] = None
+    uploaded_by: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class StockItemOut(BaseModel):
     id: int
     department_id: int
@@ -59,6 +69,7 @@ class StockItemOut(BaseModel):
     verified_by: Optional[str]
     verified_at: Optional[datetime]
     being_edited_by: Optional[str]
+    photos: List[PhotoOut] = []
 
     class Config:
         from_attributes = True

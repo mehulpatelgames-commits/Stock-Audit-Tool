@@ -6,7 +6,7 @@ from typing import List
 from models import Department, StockItem
 
 
-def generate_export(dept: Department, items: List[StockItem]) -> bytes:
+def generate_export(dept: Department, items: List[StockItem], base_url: str = "") -> bytes:
     """Generate an Excel export with management qty vs physical qty comparison.
     Extra stock (management_qty=None) is grouped at the bottom.
     Photo links are added as clickable hyperlinks where available.
@@ -106,9 +106,10 @@ def generate_export(dept: Department, items: List[StockItem]) -> bytes:
         if photo_url:
             # Make it a real clickable hyperlink
             if photo_url.startswith("/"):
-                # Local URL — append localhost so it opens in the PC browser
+                # Use base_url if provided, else fallback to relative or localhost
+                full_url = f"{base_url}{photo_url}" if base_url else photo_url
                 photo_cell.value     = "📷 View Photo"
-                photo_cell.hyperlink = f"http://localhost:8000{photo_url}"
+                photo_cell.hyperlink = full_url
                 photo_cell.font      = link_font
             else:
                 # Google Drive or other absolute URL

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -32,9 +32,11 @@ async def get_stock(
     search: str = Query(default=""),
     db: AsyncSession = Depends(get_db)
 ):
-    """Fetch stock items for a department with optional search"""
+    """Fetch stock items for a department with optional search and loaded photos"""
     result = await db.execute(
-        select(StockItem).where(StockItem.department_id == dept_id)
+        select(StockItem)
+        .where(StockItem.department_id == dept_id)
+        .options(selectinload(StockItem.photos))
     )
     items = result.scalars().all()
 
@@ -100,7 +102,7 @@ async def edit_lock(item_id: int, body: EditLockRequest, db: AsyncSession = Depe
 
 
 @router.get("/{dept_id}/export")
-async def export_stock(dept_id: int, db: AsyncSession = Depends(get_db)):
+async def export_stock(dept_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """Export department stock as Excel report"""
     dept_result = await db.execute(select(Department).where(Department.id == dept_id))
     dept = dept_result.scalars().first()
@@ -114,7 +116,12 @@ async def export_stock(dept_id: int, db: AsyncSession = Depends(get_db)):
     )
     items = items_result.scalars().all()
 
-    excel_bytes = generate_export(dept, items)
+    # Determine real public base URL (handling proxies/Railway SSL)
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
+    base_url = f"{proto}://{host}" if host else str(request.base_url).rstrip('/')
+
+    excel_bytes = generate_export(dept, items, base_url=base_url)
     filename = f"{dept.name}_audit_export.xlsx"
 
     return StreamingResponse(
