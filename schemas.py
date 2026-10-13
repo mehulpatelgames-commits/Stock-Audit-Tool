@@ -40,8 +40,37 @@ class DepartmentOut(BaseModel):
     name: str
     columns: List[str]
     filter_columns: List[str]
+    verification_method: Optional[str] = "general"
+    party_col: Optional[str] = None
+    order_col: Optional[str] = None
+    ready_qty_col: Optional[str] = None
     total_items: Optional[int] = 0
     verified_items: Optional[int] = 0
+
+    class Config:
+        from_attributes = True
+
+
+# ── FINISH GOODS BATCH ────────────────────────────────
+class FGBatchAddRequest(BaseModel):
+    bales: int = 0
+    pcs_per_bale: int = 0
+    loose_pcs: int = 0
+    verified_by: str
+    remark: Optional[str] = ""
+
+class FGBatchOut(BaseModel):
+    id: int
+    entry_no: int
+    department_id: int
+    stock_item_id: int
+    bales: int
+    pcs_per_bale: int
+    loose_pcs: int
+    total_pcs: int
+    verified_by: str
+    remark: Optional[str] = ""
+    created_at: datetime
 
     class Config:
         from_attributes = True

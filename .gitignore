@@ -10,3 +10,5 @@ dist/
 *.log
 static/uploads/*
 !static/uploads/.gitkeep
+fg_sandbox/
+*.exe

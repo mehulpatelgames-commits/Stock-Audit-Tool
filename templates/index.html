@@ -7,7 +7,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>PIL Stock Audit</title>
-  <link rel="stylesheet" href="/static/style.css?v=4">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/style.css?v=5">
 </head>
 <body>
 
@@ -193,8 +194,283 @@
     </div>
   </div>
 
+  <!-- ── FINISH GOODS SPECIFIC METHOD PAGE ─────────────── -->
+  <div class="page" id="pageFGAudit">
+    <!-- FG Top Sub-Header -->
+    <div class="fg-header">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="fg-back-btn" onclick="App.showPage('dashboard')" title="Back to Departments">←</button>
+        <div>
+          <div class="fg-title" id="fgDeptTitle">Finish Goods</div>
+          <div class="fg-subtitle">Specific Method Audit</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="fg-progress-badge" id="fgTopProgressBadge">0 / 0 Pcs</span>
+        <button class="fg-refresh-btn" onclick="FG.refreshAll()" title="Refresh">🔄</button>
+      </div>
+    </div>
+
+    <!-- FG Container Views -->
+    <div class="fg-container">
+
+      <!-- ── VIEW 1: VERIFY (MAIN FLOOR AUDITOR INTERFACE) ── -->
+      <section id="fgViewVerify">
+        <!-- 1. Select Party Card -->
+        <div class="fg-card">
+          <label class="fg-card-label">
+            <i class="bi bi-building me-1 text-primary"></i>1. SELECT PARTY
+          </label>
+          <div class="searchable-combobox" id="fgComboParty">
+            <div class="combobox-input-group">
+              <span class="combobox-icon"><i class="bi bi-search"></i></span>
+              <input type="text" class="combobox-input" id="fgPartySearch" placeholder="Search party or tap to select..." autocomplete="off"
+                     onclick="FG.openPartyDropdown()" oninput="FG.filterPartyDropdown()" onfocus="FG.openPartyDropdown()">
+              <button class="combobox-clear" type="button" id="fgBtnClearParty" onclick="FG.clearPartySelection()" style="display:none;">✕</button>
+              <button class="combobox-toggle" type="button" onclick="FG.togglePartyDropdown()">▾</button>
+            </div>
+            <div class="combobox-dropdown" id="fgPartyDropdown"></div>
+          </div>
+
+          <div id="fgPartyChip" class="fg-party-chip" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="fw-bold text-primary" id="fgPartyChipName">Party</span>
+              <span class="badge bg-primary" id="fgPartyChipPct">0%</span>
+            </div>
+            <div class="progress mb-2" style="height:6px; background:#e2e8f0; border-radius:4px; overflow:hidden;">
+              <div class="progress-bar bg-success" id="fgPartyChipBar" style="width:0%; height:100%; background:var(--success); transition:width 0.3s;"></div>
+            </div>
+            <div class="d-flex justify-content-between text-muted" style="font-size:12px;">
+              <span>Target: <b id="fgPartyChipTarget" class="text-dark">0</b></span>
+              <span>Verified: <b id="fgPartyChipVerified" class="text-success">0</b></span>
+              <span>Pending: <b id="fgPartyChipPending" class="text-warning">0</b></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Select Order Card -->
+        <div class="fg-card" id="fgCardOrder">
+          <label class="fg-card-label">
+            <i class="bi bi-tag me-1 text-primary"></i>2. SELECT ORDER NO
+          </label>
+          <div class="searchable-combobox" id="fgComboOrder">
+            <div class="combobox-input-group">
+              <span class="combobox-icon"><i class="bi bi-search"></i></span>
+              <input type="text" class="combobox-input" id="fgOrderSearch" placeholder="Choose party first..." autocomplete="off" disabled
+                     onclick="FG.openOrderDropdown()" oninput="FG.filterOrderDropdown()" onfocus="FG.openOrderDropdown()">
+              <button class="combobox-clear" type="button" id="fgBtnClearOrder" onclick="FG.clearOrderSelection()" style="display:none;">✕</button>
+              <button class="combobox-toggle" type="button" id="fgBtnToggleOrder" onclick="FG.toggleOrderDropdown()" disabled>▾</button>
+            </div>
+            <div class="combobox-dropdown" id="fgOrderDropdown"></div>
+          </div>
+
+          <!-- Order Specs & Target Counters -->
+          <div id="fgOrderSpecs" class="fg-order-specs" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold" id="fgDispOrderNo" style="font-size:16px;">Order #—</div>
+              <span class="badge-status status-pending" id="fgDispStatusBadge">Pending</span>
+            </div>
+            <div class="specs-grid mb-2">
+              <div><span class="text-muted">Size:</span> <b id="fgDispBagSize">—</b></div>
+              <div><span class="text-muted">Type:</span> <b id="fgDispType">—</b></div>
+              <div><span class="text-muted">Wt:</span> <b id="fgDispBagWt">—</b></div>
+              <div><span class="text-muted">Qty:</span> <b id="fgDispOrderQty">—</b> Bags</div>
+            </div>
+
+            <!-- 3-Pill Counters -->
+            <div class="stat-pills-row">
+              <div class="stat-pill-box">
+                <div class="stat-pill-title">Target</div>
+                <div class="stat-pill-value text-primary" id="fgDispTargetPcs">0</div>
+              </div>
+              <div class="stat-pill-box">
+                <div class="stat-pill-title">Verified</div>
+                <div class="stat-pill-value text-success" id="fgDispVerifiedPcs">0</div>
+              </div>
+              <div class="stat-pill-box">
+                <div class="stat-pill-title">Pending</div>
+                <div class="stat-pill-value text-warning" id="fgDispPendingPcs">0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Verification Batch Entry Calculator -->
+        <div class="fg-card" id="fgCardCalc" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <label class="fg-card-label mb-0">
+              <i class="bi bi-calculator me-1 text-primary"></i>3. VERIFICATION BATCH ENTRY
+            </label>
+            <span class="badge bg-light text-muted border" id="fgCalcOrderTag">Order</span>
+          </div>
+
+          <form onsubmit="FG.submitBatch(event)">
+            <!-- Bales Stepper -->
+            <div class="form-group mb-3">
+              <label class="stepper-label">Bales Count</label>
+              <div class="input-group-stepper">
+                <button type="button" class="btn-step" onclick="FG.stepVal('fgInBales', -1)">−</button>
+                <input type="number" class="form-control-stepper" id="fgInBales" value="0" min="0" oninput="FG.updateLiveCalc()">
+                <button type="button" class="btn-step" onclick="FG.stepVal('fgInBales', 1)">+</button>
+              </div>
+            </div>
+
+            <!-- Pcs Per Bale Stepper -->
+            <div class="form-group mb-3">
+              <label class="stepper-label">Pieces Per Bale</label>
+              <div class="input-group-stepper">
+                <button type="button" class="btn-step" onclick="FG.stepVal('fgInPcsPerBale', -5)">−</button>
+                <input type="number" class="form-control-stepper" id="fgInPcsPerBale" value="0" min="0" oninput="FG.updateLiveCalc()">
+                <button type="button" class="btn-step" onclick="FG.stepVal('fgInPcsPerBale', 5)">+</button>
+              </div>
+            </div>
+
+            <!-- Loose Bags Stepper -->
+            <div class="form-group mb-3">
+              <label class="stepper-label">Loose Bags / Pieces</label>
+              <div class="input-group-stepper">
+                <button type="button" class="btn-step" onclick="FG.stepVal('fgInLoose', -1)">−</button>
+                <input type="number" class="form-control-stepper" id="fgInLoose" value="0" min="0" oninput="FG.updateLiveCalc()">
+                <button type="button" class="btn-step" onclick="FG.stepVal('fgInLoose', 1)">+</button>
+              </div>
+            </div>
+
+            <!-- Live Calculation Formula Box -->
+            <div class="calc-box">
+              <div class="calc-formula" id="fgLiveFormulaText">(0 Bales × 0 Pcs) + 0 Loose</div>
+              <div class="calc-total" id="fgLiveTotalText">= 0 Pieces</div>
+            </div>
+
+            <!-- Notes -->
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+              <div style="flex:1;">
+                <label style="font-size:12px; color:var(--text-muted); margin-bottom:4px; display:block;">Auditor Name</label>
+                <input type="text" id="fgInAuditor" style="padding:10px 12px; font-size:13px;" value="Auditor">
+              </div>
+              <div style="flex:1;">
+                <label style="font-size:12px; color:var(--text-muted); margin-bottom:4px; display:block;">Location / Bay</label>
+                <input type="text" id="fgInRemark" placeholder="e.g. Bay 4" style="padding:10px 12px; font-size:13px;">
+              </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" class="btn btn-success btn-verify-lg w-100 shadow-sm" style="height:52px; font-size:16px; font-weight:700; border-radius:12px;">
+              <i class="bi bi-check2-circle me-1"></i>Add Verification Batch
+            </button>
+          </form>
+
+          <!-- Logged Batches History -->
+          <div class="mt-4 pt-3 border-top" id="fgBatchHistorySec">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="fw-bold small text-muted">Logged Batches for this Order</div>
+              <span class="badge bg-secondary" id="fgDispBatchCount">0</span>
+            </div>
+            <div id="fgDispBatchList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── VIEW 2: ORDERS (CARD-BASED SEARCHABLE LIST) ── -->
+      <section id="fgViewOrders" style="display:none;">
+        <div class="fg-card mb-2" style="padding:10px;">
+          <input type="text" id="fgCardSearchInput" placeholder="🔍 Search party or order no..." oninput="FG.renderOrdersCards()" style="padding:10px 14px; margin-bottom:8px;">
+          <div class="d-flex gap-1 overflow-auto pb-1" id="fgFilterStatusPills">
+            <button class="filter-pill active" onclick="FG.setFilter('ALL', this)">All</button>
+            <button class="filter-pill" onclick="FG.setFilter('Pending', this)">Pending</button>
+            <button class="filter-pill" onclick="FG.setFilter('Partial', this)">Partial</button>
+            <button class="filter-pill" onclick="FG.setFilter('Match', this)">Match</button>
+            <button class="filter-pill" onclick="FG.setFilter('Surplus', this)">Surplus</button>
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center px-1 mb-2 small text-muted">
+          <span id="fgOrdersListCount">Showing 0 orders</span>
+        </div>
+        <div id="fgOrderCardsContainer"></div>
+      </section>
+
+      <!-- ── VIEW 3: AUDIT LOG (ALL TEAM SUBMISSIONS) ── -->
+      <section id="fgViewLog" style="display:none;">
+        <div class="fg-card mb-2" style="padding:10px;">
+          <input type="text" id="fgLogSearchInput" placeholder="🔍 Search entry #, order, party, auditor..." oninput="FG.filterAuditLog()" style="padding:10px 14px; margin-bottom:8px;">
+          <div class="d-flex justify-content-between align-items-center px-1 small text-muted">
+            <span id="fgLogEntriesCount">0 serial entries</span>
+            <button class="btn btn-sm btn-link p-0 text-primary text-decoration-none fw-bold" onclick="FG.loadAuditLog()" style="background:none; border:none; cursor:pointer;">
+              🔄 Refresh Log
+            </button>
+          </div>
+        </div>
+        <div id="fgAuditLogContainer"></div>
+      </section>
+
+      <!-- ── VIEW 4: SUMMARY & MANAGE ── -->
+      <section id="fgViewSummary" style="display:none;">
+        <!-- Metrics Grid -->
+        <div class="stat-pills-row mb-3" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="fg-card text-center mb-0" style="padding:16px;">
+            <div class="stat-pill-title">Total Orders</div>
+            <div class="fs-2 fw-bold text-primary" id="fgKpiOrders" style="font-size:28px; font-weight:800;">0</div>
+          </div>
+          <div class="fg-card text-center mb-0" style="padding:16px;">
+            <div class="stat-pill-title">Target Ready</div>
+            <div class="fs-2 fw-bold text-dark" id="fgKpiReady" style="font-size:28px; font-weight:800;">0</div>
+          </div>
+          <div class="fg-card text-center mb-0" style="padding:16px;">
+            <div class="stat-pill-title">Verified</div>
+            <div class="fs-2 fw-bold text-success" id="fgKpiVerified" style="font-size:28px; font-weight:800; color:var(--success);">0</div>
+          </div>
+          <div class="fg-card text-center mb-0" style="padding:16px;">
+            <div class="stat-pill-title">Pending</div>
+            <div class="fs-2 fw-bold text-warning" id="fgKpiPending" style="font-size:28px; font-weight:800; color:var(--warning);">0</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+          <div style="background:#DCFCE7; border:1px solid #86EFAC; border-radius:12px; padding:12px; text-align:center;">
+            <div style="font-size:12px; font-weight:700; color:#15803D;">MATCHED</div>
+            <div style="font-size:24px; font-weight:800; color:#15803D;" id="fgKpiMatched">0</div>
+          </div>
+          <div style="background:#FEE2E2; border:1px solid #FCA5A5; border-radius:12px; padding:12px; text-align:center;">
+            <div style="font-size:12px; font-weight:700; color:#B91C1C;">DISCREPANCIES</div>
+            <div style="font-size:24px; font-weight:800; color:#B91C1C;" id="fgKpiDiscrepant">0</div>
+          </div>
+        </div>
+
+        <div class="fg-card">
+          <div style="font-weight:700; color:var(--text-muted); margin-bottom:12px;">📊 Reports &amp; Actions</div>
+          <button class="btn btn-success" style="padding:14px; font-size:15px; font-weight:700; margin-bottom:10px; width:100%;" onclick="FG.exportExcel()">
+            📥 Download Detailed Excel Report (2 Sheets)
+          </button>
+          <button class="btn btn-outline" style="padding:12px; font-size:14px; font-weight:600; width:100%;" onclick="App.showPage('dashboard')">
+            ← Return to All Departments
+          </button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- FG Bottom Navigation (4 tabs) -->
+    <nav class="fg-bottom-nav">
+      <div class="fg-bottom-item active" id="fgTabVerify" onclick="FG.switchTab('verify')">
+        <i class="bi bi-calculator"></i>
+        <span>Verify</span>
+      </div>
+      <div class="fg-bottom-item" id="fgTabOrders" onclick="FG.switchTab('orders')">
+        <i class="bi bi-card-checklist"></i>
+        <span>Orders</span>
+      </div>
+      <div class="fg-bottom-item" id="fgTabLog" onclick="FG.switchTab('log')">
+        <i class="bi bi-journal-check"></i>
+        <span>Audit Log</span>
+      </div>
+      <div class="fg-bottom-item" id="fgTabSummary" onclick="FG.switchTab('summary')">
+        <i class="bi bi-pie-chart"></i>
+        <span>Summary</span>
+      </div>
+    </nav>
+  </div>
+
   <!-- ── BOTTOM NAV (3 items) ──────────────────────── -->
-  <div class="bottom-nav">
+  <div class="bottom-nav" id="mainBottomNav">
     <button class="nav-item active" id="nav-dashboard" onclick="App.showPage('dashboard')">
       <span class="nav-icon">🏠</span>
       <span>Home</span>
@@ -217,23 +493,57 @@
 <div class="modal-overlay" id="importModal">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div class="modal-title">📤 Import Excel</div>
+    <div class="modal-title">📤 Import Excel Sheet</div>
+
+    <div class="form-group">
+      <label>Verification Method</label>
+      <div style="display:flex; gap:10px; margin-top:6px;">
+        <label id="lblMethodGeneral" style="flex:1; border:2px solid var(--primary); background:#EFF6FF; border-radius:12px; padding:10px; cursor:pointer; text-align:center;">
+          <input type="radio" name="importMethod" value="general" checked onchange="Admin.toggleImportMethod('general')" style="width:auto; margin-bottom:4px;">
+          <div style="font-weight:700; font-size:13px; color:var(--primary);">⚙️ General Method</div>
+          <div style="font-size:11px; color:var(--text-muted);">Fabric, Yarn, Packaging</div>
+        </label>
+        <label id="lblMethodFG" style="flex:1; border:2px solid var(--border); background:white; border-radius:12px; padding:10px; cursor:pointer; text-align:center;">
+          <input type="radio" name="importMethod" value="finish_goods" onchange="Admin.toggleImportMethod('finish_goods')" style="width:auto; margin-bottom:4px;">
+          <div style="font-weight:700; font-size:13px; color:var(--text);">📦 Finish Goods</div>
+          <div style="font-size:11px; color:var(--text-muted);">Bales × Pcs + Loose</div>
+        </label>
+      </div>
+    </div>
 
     <div class="form-group">
       <label>Department Name</label>
-      <input type="text" id="importDeptName" placeholder="e.g. Fabric, Yarn, Packaging">
+      <input type="text" id="importDeptName" placeholder="e.g. Fabric, Yarn, Packaging, or Finish Goods">
     </div>
 
     <div class="form-group">
-      <label>Excel File</label>
+      <label>Excel File (.xlsx / .xls)</label>
       <input type="file" id="importFile" accept=".xlsx,.xls">
     </div>
 
+    <!-- General Method Management Qty Selection -->
     <div id="importQtyField" style="display:none;">
       <div class="form-group">
         <label>Management Qty Column Name <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
         <input type="text" id="importQtyColumn" placeholder="e.g. Net, Qty, Weight — leave blank if none">
         <div id="importColumnsHint" style="font-size:12px; color:var(--text-muted); margin-top:4px;"></div>
+      </div>
+    </div>
+
+    <!-- Finish Goods Column Mapping Selection -->
+    <div id="importFGMapping" style="display:none; background:#F8FAFC; border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:14px;">
+      <div style="font-weight:700; color:var(--primary); font-size:13px; margin-bottom:8px;">📦 Finish Goods Column Mapping:</div>
+      <div class="form-group" style="margin-bottom:8px;">
+        <label style="font-size:12px; margin-bottom:2px; display:block;">Party Name Column</label>
+        <select id="importFGPartyCol" style="padding:8px 10px; font-size:13px; border-radius:8px;"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:8px;">
+        <label style="font-size:12px; margin-bottom:2px; display:block;">Order No Column</label>
+        <select id="importFGOrderCol" style="padding:8px 10px; font-size:13px; border-radius:8px;"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label style="font-size:12px; margin-bottom:2px; display:block;">Target Ready Pcs Column</label>
+        <select id="importFGReadyCol" style="padding:8px 10px; font-size:13px; border-radius:8px;"></select>
       </div>
     </div>
 
@@ -272,7 +582,43 @@
   <div class="modal-sheet" id="stockModalContent"></div>
 </div>
 
+<!-- ══════════════════════════════════════════════════
+     MODAL: FG PHYSICAL INVENTORY TAG CONFIRMATION
+══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="fgSuccessModal">
+  <div class="modal-sheet text-center" style="max-height:90vh; overflow-y:auto; padding:24px 20px; text-align:center;">
+    <div style="margin-bottom:12px;">
+      <i class="bi bi-check-circle-fill text-success" style="font-size:3.8rem; color:var(--success);"></i>
+    </div>
+    <div style="font-size:20px; font-weight:800; color:var(--text); margin-bottom:4px;">Stock Verified &amp; Submitted!</div>
+    <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Audit entry recorded in team master log.</div>
+
+    <!-- Highlight Box for Physical Tagging -->
+    <div style="background:#F0FDF4; border:2px dashed #16A34A; border-radius:14px; padding:16px; margin-bottom:16px; text-align:center;">
+      <div style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Serial Entry Number</div>
+      <div style="font-size:42px; font-weight:900; color:#16A34A; line-height:1.1; margin:6px 0;" id="fgSuccEntryNo">#1</div>
+      <div style="font-size:20px; font-weight:800; color:var(--text);" id="fgSuccBalesText">15 Bales</div>
+      <div style="font-size:14px; color:var(--text-muted);" id="fgSuccTotalPcsText">(2,025 Pieces)</div>
+      <hr style="border:0; border-top:1px solid #BBF7D0; margin:10px 0;">
+      <div style="font-size:13px; font-weight:700; color:var(--text-muted);" id="fgSuccOrderParty">Order #PO317 • AGROSZEMEK KFT</div>
+
+      <div style="background:#16A34A; color:white; border-radius:10px; padding:10px; margin-top:12px; font-weight:800;">
+        <div style="font-size:11px; opacity:0.9; letter-spacing:0.5px;">✍️ WRITE THIS ON PHYSICAL BALES:</div>
+        <div style="font-size:18px; margin-top:2px;" id="fgSuccPhysicalTag">ENTRY #1 — 15 BALES</div>
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-success" style="padding:14px; font-size:16px; font-weight:800; width:100%;" onclick="Modals.close('fgSuccessModal')">
+      ✅ Done &amp; Continue Audit
+    </button>
+    <div class="mt-8"></div>
+    <button type="button" class="btn btn-ghost" style="width:100%;" onclick="Modals.close('fgSuccessModal'); FG.switchTab('log');">
+      View in Master Audit Log →
+    </button>
+  </div>
+</div>
+
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mini.min.js"></script>
-<script src="/static/app.js?v=6"></script>
+<script src="/static/app.js?v=7"></script>
 </body>
 </html>

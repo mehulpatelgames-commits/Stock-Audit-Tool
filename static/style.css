@@ -813,3 +813,380 @@ label {
 }
 .btn-icon.danger { border-color: #FFCDD2; color: var(--danger); }
 .btn-icon:active { opacity: 0.7; }
+
+/* ══════════════════════════════════════════════════
+   FINISH GOODS SPECIFIC METHOD STYLES
+══════════════════════════════════════════════════ */
+#pageFGAudit {
+  padding-bottom: 75px;
+}
+.fg-header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+  color: white;
+  padding: 12px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+.fg-back-btn {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  font-size: 18px;
+  font-weight: bold;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fg-back-btn:active {
+  background: rgba(255,255,255,0.3);
+}
+.fg-title {
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+.fg-subtitle {
+  font-size: 11px;
+  opacity: 0.85;
+}
+.fg-progress-badge {
+  background: #f59e0b;
+  color: #1e1e1e;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.fg-refresh-btn {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fg-container {
+  padding: 14px 14px 20px;
+}
+.fg-card {
+  background: white;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.fg-card-label {
+  display: block;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.fg-party-chip {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  margin-top: 10px;
+}
+.fg-order-specs {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.specs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+/* ── SEARCHABLE DYNAMIC COMBOBOX ─────────────────── */
+.searchable-combobox {
+  position: relative;
+  width: 100%;
+}
+.combobox-input-group {
+  display: flex;
+  align-items: center;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  background: white;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.combobox-input-group:focus-within {
+  border-color: var(--primary);
+}
+.combobox-icon {
+  padding: 0 10px;
+  color: var(--primary);
+  font-size: 15px;
+}
+.combobox-input {
+  flex: 1;
+  border: none !important;
+  outline: none !important;
+  padding: 12px 4px !important;
+  font-size: 14px !important;
+  background: transparent !important;
+}
+.combobox-clear {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 14px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.combobox-toggle {
+  background: #f8fafc;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: #64748b;
+  font-size: 14px;
+  padding: 0 14px;
+  height: 44px;
+  cursor: pointer;
+}
+.combobox-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.1);
+  z-index: 1060;
+  display: none;
+  margin-top: 4px;
+}
+.combobox-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s;
+}
+.combobox-item:active, .combobox-item:hover {
+  background: #f8fafc;
+}
+.combobox-item.selected {
+  background: #eff6ff;
+  border-left: 4px solid var(--primary);
+}
+
+/* ── STAT PILLS ──────────────────────────────────── */
+.stat-pills-row {
+  display: flex;
+  gap: 8px;
+}
+.stat-pill-box {
+  flex: 1;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.stat-pill-title {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.stat-pill-value {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+/* ── STEPPER CONTROLS ────────────────────────────── */
+.stepper-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.input-group-stepper {
+  display: flex;
+  align-items: center;
+}
+.btn-step {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  cursor: pointer;
+}
+.btn-step:first-child {
+  border-radius: 10px 0 0 10px;
+}
+.btn-step:last-child {
+  border-radius: 0 10px 10px 0;
+}
+.btn-step:active {
+  background: #e2e8f0;
+}
+.form-control-stepper {
+  flex: 1;
+  height: 48px;
+  font-size: 20px;
+  font-weight: 800;
+  text-align: center;
+  border-radius: 0 !important;
+  border: 1px solid #cbd5e1 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  color: #0f172a;
+}
+
+/* ── LIVE CALCULATOR BOX ─────────────────────────── */
+.calc-box {
+  background: #eff6ff;
+  border: 2px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  margin: 12px 0;
+}
+.calc-formula {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e40af;
+}
+.calc-total {
+  font-size: 26px;
+  font-weight: 900;
+  color: #1d4ed8;
+  line-height: 1.2;
+  margin-top: 4px;
+}
+
+/* ── STATUS BADGES ───────────────────────────────── */
+.badge-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  display: inline-block;
+}
+.status-match {
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+.status-partial {
+  background-color: #fef9c3;
+  color: #a16207;
+  border: 1px solid #fde047;
+}
+.status-surplus {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+.status-pending {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+/* ── ORDER CARDS & FILTER PILLS ──────────────────── */
+.order-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 12px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.15s;
+}
+.order-card:active {
+  background: #f8fafc;
+  transform: scale(0.99);
+}
+.filter-pill {
+  padding: 4px 10px;
+  border-radius: 100px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-pill.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+/* ── FG BOTTOM NAVIGATION ────────────────────────── */
+.fg-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 65px;
+  background: white;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 1030;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+}
+.fg-bottom-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  flex: 1;
+  height: 100%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.fg-bottom-item i {
+  font-size: 20px;
+  margin-bottom: 2px;
+}
+.fg-bottom-item.active {
+  color: var(--primary);
+}

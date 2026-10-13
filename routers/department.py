@@ -29,23 +29,40 @@ async def list_departments(audit_id: int, db: AsyncSession = Depends(get_db)):
             name=dept.name,
             columns=dept.columns or [],
             filter_columns=dept.filter_columns or [],
+            verification_method=dept.verification_method or "general",
+            party_col=dept.party_col,
+            order_col=dept.order_col,
+            ready_qty_col=dept.ready_qty_col,
             total_items=total.scalar(),
             verified_items=verified.scalar()
         ))
     return out
 
 
+@router.post("/inspect-sheet")
+async def inspect_sheet(file: UploadFile = File(...)):
+    """Inspect first row of uploaded sheet to return detected column headers"""
+    contents = await file.read()
+    columns, _ = parse_excel(contents, qty_column="")
+    return {"columns": columns}
+
+
 @router.post("/import")
 async def import_department(
     audit_id: int = Form(...),
     dept_name: str = Form(...),
-    qty_column: Optional[str] = Form(default=""),   # optional — empty means no mgmt qty
+    verification_method: str = Form(default="general"),
+    qty_column: Optional[str] = Form(default=""),
+    party_col: Optional[str] = Form(default=""),
+    order_col: Optional[str] = Form(default=""),
+    ready_qty_col: Optional[str] = Form(default=""),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload an Excel file to create/replace a department's stock data"""
     contents = await file.read()
-    columns, rows = parse_excel(contents, qty_column)
+    target_qty_col = ready_qty_col if verification_method == "finish_goods" else qty_column
+    columns, rows = parse_excel(contents, target_qty_col)
 
     # Delete existing department with same name in this audit (re-import)
     existing = await db.execute(
@@ -57,12 +74,22 @@ async def import_department(
         await db.delete(existing_dept)
         await db.commit()
 
-    # Create new department
+    if verification_method == "finish_goods":
+        filter_cols = [c for c in [party_col, order_col] if c and c in columns]
+        if not filter_cols:
+            filter_cols = columns[:2] if columns else []
+    else:
+        filter_cols = ["Stand"] if "Stand" in columns else (columns[:2] if columns else [])
+
     dept = Department(
         audit_id=audit_id,
         name=dept_name,
         columns=columns,
-        filter_columns=["Stand"] if "Stand" in columns else (columns[:2] if columns else [])
+        filter_columns=filter_cols,
+        verification_method=verification_method,
+        party_col=party_col or None,
+        order_col=order_col or None,
+        ready_qty_col=ready_qty_col or None
     )
     db.add(dept)
     await db.flush()
@@ -81,7 +108,7 @@ async def import_department(
         StockItem(
             department_id=dept.id,
             data=row,
-            management_qty=to_float(row.get(qty_column)) if qty_column else None
+            management_qty=to_float(row.get(target_qty_col)) if target_qty_col else None
         )
         for row in rows
     ]
@@ -89,9 +116,10 @@ async def import_department(
     await db.commit()
 
     return {
-        "message": f"Imported {len(items)} items into '{dept_name}'",
+        "message": f"Imported {len(items)} items into '{dept_name}' ({verification_method})",
         "department_id": dept.id,
-        "columns": columns
+        "columns": columns,
+        "verification_method": verification_method
     }
 
 

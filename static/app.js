@@ -177,6 +177,14 @@ const App = {
       document.getElementById('dashSectionTitle').textContent = 'My Department';
     }
 
+    if (!State.isAdmin && deptId) {
+      const dept = State.departments.find(d => d.id === deptId);
+      if (dept && dept.verification_method === 'finish_goods') {
+        FG.open(deptId);
+        return;
+      }
+    }
+
     Dashboard.render();
     ExtraStock.populateForm();
     App.showPage('dashboard');
@@ -233,8 +241,19 @@ const App = {
   showPage(page) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    document.getElementById(`page${page.charAt(0).toUpperCase() + page.slice(1)}`).classList.add('active');
-    document.getElementById(`nav-${page}`).classList.add('active');
+
+    const pageId = page === 'fgaudit' ? 'pageFGAudit' : `page${page.charAt(0).toUpperCase() + page.slice(1)}`;
+    const pageEl = document.getElementById(pageId);
+    if (pageEl) pageEl.classList.add('active');
+
+    const mainNav = document.getElementById('mainBottomNav');
+    if (mainNav) {
+      mainNav.style.display = page === 'fgaudit' ? 'none' : 'flex';
+    }
+
+    const navEl = document.getElementById(`nav-${page}`);
+    if (navEl) navEl.classList.add('active');
+
     if (page === 'audit') {
       Audit.renderDynamicFilters();
     }
@@ -284,6 +303,11 @@ const Dashboard = {
       const pct     = total ? Math.round((verified / total) * 100) : 0;
       const allDone = total > 0 && pending === 0;
 
+      const isFG = dept.verification_method === 'finish_goods';
+      const methodBadge = isFG
+        ? `<div class="status-badge" style="background:#E0E7FF; color:#3730A3;">📦 Specific FG Method</div>`
+        : '';
+
       const statusBadge = allDone
         ? `<div class="status-badge ready">✅ Good to Export</div>`
         : `<div class="status-badge working">🔄 Currently Working</div>`;
@@ -304,6 +328,7 @@ const Dashboard = {
             <div class="stat-pill verified">✅ ${verified} Done</div>
             <div class="stat-pill pending">⏳ ${pending} Left</div>
             ${statusBadge}
+            ${methodBadge}
           </div>
           ${State.isAdmin ? `
             <div class="dept-card-admin-actions" onclick="event.stopPropagation()">
@@ -321,6 +346,11 @@ const Dashboard = {
 
   openDept(deptId) {
     State.activeDeptId = deptId;
+    const dept = State.departments.find(d => d.id === deptId);
+    if (dept && dept.verification_method === 'finish_goods') {
+      FG.open(deptId);
+      return;
+    }
     if (State.isAdmin) Audit.renderDeptChips();
     Audit.loadStock();
     App.showPage('audit');
@@ -881,10 +911,41 @@ const Admin = {
     return res;
   },
 
+  toggleImportMethod(method) {
+    const isFG = method === 'finish_goods';
+    const lblGen = document.getElementById('lblMethodGeneral');
+    const lblFG  = document.getElementById('lblMethodFG');
+    if (lblGen && lblFG) {
+      if (isFG) {
+        lblFG.style.borderColor = 'var(--primary)';
+        lblFG.style.background  = '#EFF6FF';
+        lblGen.style.borderColor = 'var(--border)';
+        lblGen.style.background  = 'white';
+      } else {
+        lblGen.style.borderColor = 'var(--primary)';
+        lblGen.style.background  = '#EFF6FF';
+        lblFG.style.borderColor = 'var(--border)';
+        lblFG.style.background  = 'white';
+      }
+    }
+
+    const deptIn = document.getElementById('importDeptName');
+    if (isFG && (!deptIn.value || deptIn.value === 'Fabric' || deptIn.value === 'Yarn')) {
+      deptIn.value = 'Finish Goods';
+    }
+
+    const hasFile = !!document.getElementById('importFile').files[0];
+    if (hasFile) {
+      document.getElementById('importQtyField').style.display  = isFG ? 'none' : 'block';
+      document.getElementById('importFGMapping').style.display = isFG ? 'block' : 'none';
+    }
+  },
+
   async importExcel() {
     const deptName = document.getElementById('importDeptName').value.trim();
     const file     = document.getElementById('importFile').files[0];
     const qtyCol   = document.getElementById('importQtyColumn').value;
+    const method   = document.querySelector('input[name="importMethod"]:checked')?.value || 'general';
 
     if (!deptName) { toast('Enter department name', 'warning'); return; }
     if (!file)     { toast('Select an Excel file', 'warning'); return; }
@@ -896,7 +957,18 @@ const Admin = {
       const fd = new FormData();
       fd.append('audit_id',   State.activeAudit.id);
       fd.append('dept_name',  deptName);
-      fd.append('qty_column', qtyCol || '');
+      fd.append('verification_method', method);
+
+      if (method === 'finish_goods') {
+        const partyCol = document.getElementById('importFGPartyCol').value;
+        const orderCol = document.getElementById('importFGOrderCol').value;
+        const readyCol = document.getElementById('importFGReadyCol').value;
+        fd.append('party_col', partyCol || '');
+        fd.append('order_col', orderCol || '');
+        fd.append('ready_qty_col', readyCol || '');
+      } else {
+        fd.append('qty_column', qtyCol || '');
+      }
       fd.append('file', file);
 
       const res = await API.form('/api/departments/import', fd);
@@ -910,7 +982,7 @@ const Admin = {
       Audit.renderDeptChips();
       ExtraStock.populateForm();
     } catch(e) {
-      toast('Import failed. Check the file and try again.', 'error');
+      toast(e.message || 'Import failed. Check the file and try again.', 'error');
     } finally {
       hideSpinner();
     }
@@ -972,8 +1044,12 @@ const Admin = {
     const file = document.getElementById('importFile').files[0];
     if (!file) return;
 
-    document.getElementById('importQtyField').style.display = 'block';
-    document.getElementById('importPreview').style.display  = 'block';
+    const curMethod = document.querySelector('input[name="importMethod"]:checked')?.value || 'general';
+    const isFG = curMethod === 'finish_goods';
+
+    document.getElementById('importQtyField').style.display  = isFG ? 'none' : 'block';
+    document.getElementById('importFGMapping').style.display = isFG ? 'block' : 'none';
+    document.getElementById('importPreview').style.display   = 'block';
     document.getElementById('importPreviewText').textContent = `📄 ${file.name} (${(file.size/1024).toFixed(0)} KB)`;
     document.getElementById('importQtyColumn').value = '';
     document.getElementById('importColumnsHint').innerHTML = '<span style="color:var(--text-muted)">Reading columns...</span>';
@@ -1003,6 +1079,24 @@ const Admin = {
           ).join('');
           document.getElementById('importColumnsHint').innerHTML =
             `<div style="margin-bottom:6px;color:var(--text-muted);font-size:12px;">📋 Tap a column to select as Management Qty:</div>${chips}`;
+
+          // Also populate Finish Goods Mapping Dropdowns
+          const pSel = document.getElementById('importFGPartyCol');
+          const oSel = document.getElementById('importFGOrderCol');
+          const rSel = document.getElementById('importFGReadyCol');
+          if (pSel && oSel && rSel) {
+            const opts = cols.map(c => `<option value="${c}">${c}</option>`).join('');
+            pSel.innerHTML = opts;
+            oSel.innerHTML = opts;
+            rSel.innerHTML = opts;
+
+            cols.forEach(c => {
+              const lc = c.toLowerCase();
+              if (lc.includes('party')) pSel.value = c;
+              if (lc.includes('order')) oSel.value = c;
+              if (lc.includes('ready') || lc.includes('pcs') || lc.includes('qty')) rSel.value = c;
+            });
+          }
         } else {
           document.getElementById('importColumnsHint').textContent = '⚠️ Could not read columns. Type the name manually.';
         }
@@ -1030,8 +1124,16 @@ const Modals = {
     if (!State.isAdmin) { toast('Admin access required', 'error'); return; }
     document.getElementById('importDeptName').value = '';
     document.getElementById('importFile').value     = '';
-    document.getElementById('importQtyField').style.display = 'none';
-    document.getElementById('importPreview').style.display  = 'none';
+    document.getElementById('importQtyField').style.display  = 'none';
+    document.getElementById('importFGMapping').style.display = 'none';
+    document.getElementById('importPreview').style.display   = 'none';
+
+    const genRadio = document.querySelector('input[name="importMethod"][value="general"]');
+    if (genRadio) {
+      genRadio.checked = true;
+      Admin.toggleImportMethod('general');
+    }
+
     Modals.open('importModal');
   },
 
@@ -1057,11 +1159,634 @@ const Modals = {
   }
 };
 
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) overlay.classList.remove('open');
-  });
+// ══════════════════════════════════════════════════
+// FINISH GOODS SPECIFIC METHOD CONTROLLER
+// ══════════════════════════════════════════════════
+const FG = {
+  currentParties: [],
+  currentOrders: [],
+  allOrdersData: [],
+  allLogData: [],
+  selectedPartyName: "",
+  selectedItemId: null,
+  selectedOrderData: null,
+  currentFilterStatus: 'ALL',
+
+  async open(deptId) {
+    State.activeDeptId = deptId;
+    const dept = State.departments.find(d => d.id === deptId);
+    if (dept) {
+      document.getElementById('fgDeptTitle').textContent = dept.name;
+    }
+
+    // Set saved auditor name
+    const savedAuditor = localStorage.getItem('pil_auditor_name') || State.user || 'Auditor';
+    const inAuditor = document.getElementById('fgInAuditor');
+    if (inAuditor) inAuditor.value = savedAuditor;
+
+    App.showPage('fgaudit');
+    FG.switchTab('verify');
+    await FG.refreshAll();
+  },
+
+  async refreshAll() {
+    if (!State.activeDeptId) return;
+    showSpinner();
+    try {
+      await FG.fetchSummary();
+      await FG.fetchParties();
+      if (FG.selectedPartyName) {
+        await FG.loadOrdersForParty(FG.selectedPartyName);
+      }
+      await FG.loadAllOrdersCards();
+    } catch (e) {
+      console.error("FG refresh error:", e);
+    } finally {
+      hideSpinner();
+    }
+  },
+
+  // ── SUMMARY ──────────────────────────────────────────
+  async fetchSummary() {
+    try {
+      const data = await API.get(`/api/stock/fg/${State.activeDeptId}/summary`);
+      document.getElementById('fgKpiOrders').textContent     = (data.total_orders || 0).toLocaleString();
+      document.getElementById('fgKpiReady').textContent      = (data.total_ready_pcs || 0).toLocaleString();
+      document.getElementById('fgKpiVerified').textContent   = (data.total_verified_pcs || 0).toLocaleString();
+      document.getElementById('fgKpiPending').textContent    = (data.total_pending_pcs || 0).toLocaleString();
+      document.getElementById('fgKpiMatched').textContent    = (data.matched || 0).toLocaleString();
+      document.getElementById('fgKpiDiscrepant').textContent = (data.discrepancy || 0).toLocaleString();
+
+      document.getElementById('fgTopProgressBadge').textContent = 
+        `${(data.total_verified_pcs || 0).toLocaleString()} / ${(data.total_ready_pcs || 0).toLocaleString()} Pcs`;
+    } catch(err) {
+      console.error("FG Summary error:", err);
+    }
+  },
+
+  // ── PARTIES ──────────────────────────────────────────
+  async fetchParties() {
+    try {
+      FG.currentParties = await API.get(`/api/stock/fg/${State.activeDeptId}/parties`);
+      if (FG.selectedPartyName && FG.currentParties.some(p => p.party === FG.selectedPartyName)) {
+        const pData = FG.currentParties.find(p => p.party === FG.selectedPartyName);
+        document.getElementById('fgPartyChipTarget').textContent   = (pData.total_ready || 0).toLocaleString();
+        document.getElementById('fgPartyChipVerified').textContent = (pData.total_verified || 0).toLocaleString();
+        document.getElementById('fgPartyChipPending').textContent  = (pData.total_pending || 0).toLocaleString();
+      }
+    } catch(err) {
+      console.error("FG Parties error:", err);
+    }
+  },
+
+  openPartyDropdown() {
+    FG.renderPartyDropdownItems(FG.currentParties);
+    document.getElementById('fgPartyDropdown').style.display = 'block';
+  },
+
+  togglePartyDropdown() {
+    const dd = document.getElementById('fgPartyDropdown');
+    if (dd.style.display === 'block') {
+      dd.style.display = 'none';
+    } else {
+      FG.openPartyDropdown();
+    }
+  },
+
+  filterPartyDropdown() {
+    const q = (document.getElementById('fgPartySearch').value || '').toLowerCase();
+    const filtered = FG.currentParties.filter(p => p.party.toLowerCase().includes(q));
+    FG.renderPartyDropdownItems(filtered);
+    document.getElementById('fgPartyDropdown').style.display = 'block';
+  },
+
+  renderPartyDropdownItems(parties) {
+    const dd = document.getElementById('fgPartyDropdown');
+    if (!parties || parties.length === 0) {
+      dd.innerHTML = '<div style="padding:12px; text-align:center; color:var(--text-muted); font-size:13px;">No matching party found</div>';
+      return;
+    }
+
+    dd.innerHTML = parties.map(p => {
+      const isSel = p.party === FG.selectedPartyName;
+      return `
+        <div class="combobox-item ${isSel ? 'selected' : ''}" onclick="FG.selectParty('${FG.escapeJs(p.party)}')">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:700; color:${isSel ? 'var(--primary)' : 'var(--text)'}">${p.party}</span>
+            <span class="badge" style="background:#f1f5f9; color:var(--text-muted); border:1px solid #e2e8f0; font-size:11px;">${p.orders_count} orders</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:11px; margin-top:4px;">
+            <span>Target: ${(p.total_ready || 0).toLocaleString()}</span>
+            <span>Pending: <b class="${p.total_pending > 0 ? 'text-warning' : 'text-success'}">${(p.total_pending || 0).toLocaleString()}</b></span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  async selectParty(partyName) {
+    FG.selectedPartyName = partyName;
+    document.getElementById('fgPartySearch').value = partyName;
+    document.getElementById('fgPartyDropdown').style.display = 'none';
+    document.getElementById('fgBtnClearParty').style.display = 'inline-block';
+
+    // Reset Order
+    FG.clearOrderSelection();
+
+    // Show party chip
+    const pData = FG.currentParties.find(p => p.party === partyName);
+    const chip = document.getElementById('fgPartyChip');
+    if (pData) {
+      chip.style.display = 'block';
+      document.getElementById('fgPartyChipName').textContent     = pData.party;
+      document.getElementById('fgPartyChipTarget').textContent   = (pData.total_ready || 0).toLocaleString();
+      document.getElementById('fgPartyChipVerified').textContent = (pData.total_verified || 0).toLocaleString();
+      document.getElementById('fgPartyChipPending').textContent  = (pData.total_pending || 0).toLocaleString();
+
+      const pct = pData.total_ready > 0 ? Math.min(100, Math.round((pData.total_verified / pData.total_ready) * 100)) : 0;
+      document.getElementById('fgPartyChipBar').style.width      = `${pct}%`;
+      document.getElementById('fgPartyChipPct').textContent      = `${pct}%`;
+    }
+
+    // Enable Order combobox
+    const inOrder = document.getElementById('fgOrderSearch');
+    const btnToggle = document.getElementById('fgBtnToggleOrder');
+    inOrder.disabled = false;
+    btnToggle.disabled = false;
+    inOrder.placeholder = "Search order or tap to select...";
+    await FG.loadOrdersForParty(partyName);
+  },
+
+  clearPartySelection() {
+    FG.selectedPartyName = "";
+    document.getElementById('fgPartySearch').value = "";
+    document.getElementById('fgBtnClearParty').style.display = 'none';
+    document.getElementById('fgPartyChip').style.display = 'none';
+
+    FG.clearOrderSelection();
+    const inOrder = document.getElementById('fgOrderSearch');
+    const btnToggle = document.getElementById('fgBtnToggleOrder');
+    inOrder.disabled = true;
+    btnToggle.disabled = true;
+    inOrder.placeholder = "Choose party first...";
+  },
+
+  // ── ORDERS FOR PARTY ─────────────────────────────────
+  async loadOrdersForParty(party) {
+    try {
+      FG.currentOrders = await API.get(`/api/stock/fg/${State.activeDeptId}/orders?party=${encodeURIComponent(party)}`);
+    } catch (err) {
+      console.error("FG orders load error:", err);
+    }
+  },
+
+  openOrderDropdown() {
+    if (!FG.selectedPartyName) return;
+    FG.renderOrderDropdownItems(FG.currentOrders);
+    document.getElementById('fgOrderDropdown').style.display = 'block';
+  },
+
+  toggleOrderDropdown() {
+    const dd = document.getElementById('fgOrderDropdown');
+    if (dd.style.display === 'block') {
+      dd.style.display = 'none';
+    } else {
+      FG.openOrderDropdown();
+    }
+  },
+
+  filterOrderDropdown() {
+    const q = (document.getElementById('fgOrderSearch').value || '').toLowerCase();
+    const filtered = FG.currentOrders.filter(o => 
+      String(o.order_no).toLowerCase().includes(q) || 
+      String(o.data['BAG SIZE'] || '').toLowerCase().includes(q) ||
+      String(o.data['TYPE'] || '').toLowerCase().includes(q)
+    );
+    FG.renderOrderDropdownItems(filtered);
+    document.getElementById('fgOrderDropdown').style.display = 'block';
+  },
+
+  renderOrderDropdownItems(orders) {
+    const dd = document.getElementById('fgOrderDropdown');
+    if (!orders || orders.length === 0) {
+      dd.innerHTML = '<div style="padding:12px; text-align:center; color:var(--text-muted); font-size:13px;">No matching orders</div>';
+      return;
+    }
+
+    dd.innerHTML = orders.map(o => {
+      const isSel = o.id === FG.selectedItemId;
+      let badgeClass = 'status-pending';
+      if (o.status === 'Match') badgeClass = 'status-match';
+      else if (o.status.startsWith('Surplus')) badgeClass = 'status-surplus';
+      else if (o.status.startsWith('Partial')) badgeClass = 'status-partial';
+
+      return `
+        <div class="combobox-item ${isSel ? 'selected' : ''}" onclick="FG.selectOrder(${o.id})">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <span style="font-weight:700; color:${isSel ? 'var(--primary)' : 'var(--text)'}">Order #${o.order_no}</span>
+            <span class="badge-status ${badgeClass}" style="font-size:11px;">${o.status}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:11px;">
+            <span>Size: ${o.data['BAG SIZE'] || '—'}</span>
+            <span>Target: <b style="color:var(--text);">${(o.ready_pcs || 0).toLocaleString()}</b> Pcs</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  async selectOrder(orderId) {
+    FG.selectedItemId = orderId;
+    const order = FG.currentOrders.find(o => o.id === orderId);
+    if (order) {
+      document.getElementById('fgOrderSearch').value = `Order #${order.order_no} (${(order.ready_pcs || 0).toLocaleString()} Pcs)`;
+    }
+    document.getElementById('fgOrderDropdown').style.display = 'none';
+    document.getElementById('fgBtnClearOrder').style.display = 'inline-block';
+
+    await FG.loadOrderDetails(orderId);
+  },
+
+  clearOrderSelection() {
+    FG.selectedItemId = null;
+    FG.selectedOrderData = null;
+    document.getElementById('fgOrderSearch').value = "";
+    document.getElementById('fgBtnClearOrder').style.display = 'none';
+    document.getElementById('fgOrderSpecs').style.display = 'none';
+    document.getElementById('fgCardCalc').style.display = 'none';
+  },
+
+  async loadOrderDetails(itemId) {
+    try {
+      const data = await API.get(`/api/stock/fg/order/${itemId}`);
+      FG.selectedOrderData = data;
+
+      // Specs
+      document.getElementById('fgOrderSpecs').style.display = 'block';
+      document.getElementById('fgDispOrderNo').textContent  = `Order #${data.order_no}`;
+      document.getElementById('fgDispBagSize').textContent  = data.data['BAG SIZE'] || '—';
+      document.getElementById('fgDispType').textContent     = data.data['TYPE'] || '—';
+      document.getElementById('fgDispBagWt').textContent    = data.data['BAG WT'] || '—';
+      document.getElementById('fgDispOrderQty').textContent = data.data['QTY'] || '—';
+
+      document.getElementById('fgDispTargetPcs').textContent   = (data.ready_pcs || 0).toLocaleString();
+      document.getElementById('fgDispVerifiedPcs').textContent = (data.verified_pcs || 0).toLocaleString();
+      document.getElementById('fgDispPendingPcs').textContent  = Math.max(0, data.pending_pcs || 0).toLocaleString();
+
+      const badge = document.getElementById('fgDispStatusBadge');
+      if (data.verified_pcs === 0) {
+        badge.className = 'badge-status status-pending';
+        badge.textContent = 'Pending';
+      } else if (data.difference === 0) {
+        badge.className = 'badge-status status-match';
+        badge.textContent = 'Match';
+      } else if (data.difference > 0) {
+        badge.className = 'badge-status status-surplus';
+        badge.textContent = `Surplus (+${data.difference})`;
+      } else {
+        badge.className = 'badge-status status-partial';
+        badge.textContent = `Partial (-${data.pending_pcs})`;
+      }
+
+      // Calc box
+      document.getElementById('fgCardCalc').style.display = 'block';
+      document.getElementById('fgCalcOrderTag').textContent = `#${data.order_no}`;
+
+      document.getElementById('fgInBales').value = 0;
+      document.getElementById('fgInPcsPerBale').value = 0;
+      document.getElementById('fgInLoose').value = 0;
+      FG.updateLiveCalc();
+
+      FG.renderBatchHistory(data.batches || []);
+
+    } catch (err) {
+      console.error("FG Order details error:", err);
+    }
+  },
+
+  // ── STEPPER CONTROLS ─────────────────────────────────
+  stepVal(id, delta) {
+    const el = document.getElementById(id);
+    let v = (parseInt(el.value) || 0) + delta;
+    if (v < 0) v = 0;
+    el.value = v;
+    FG.updateLiveCalc();
+  },
+
+  updateLiveCalc() {
+    const bales = parseInt(document.getElementById('fgInBales').value) || 0;
+    const pcs   = parseInt(document.getElementById('fgInPcsPerBale').value) || 0;
+    const loose = parseInt(document.getElementById('fgInLoose').value) || 0;
+
+    const total = (bales * pcs) + loose;
+
+    document.getElementById('fgLiveFormulaText').textContent = 
+      `(${bales} Bales × ${pcs} Pcs) + ${loose} Loose`;
+    document.getElementById('fgLiveTotalText').textContent = 
+      `= ${total.toLocaleString()} Pieces`;
+  },
+
+  // ── SUBMIT BATCH ─────────────────────────────────────
+  async submitBatch(e) {
+    e.preventDefault();
+    if (!FG.selectedItemId) return;
+
+    const bales   = parseInt(document.getElementById('fgInBales').value) || 0;
+    const pcs     = parseInt(document.getElementById('fgInPcsPerBale').value) || 0;
+    const loose   = parseInt(document.getElementById('fgInLoose').value) || 0;
+    const auditor = document.getElementById('fgInAuditor').value.trim() || State.user || 'Auditor';
+    const remark  = document.getElementById('fgInRemark').value.trim();
+
+    const total = (bales * pcs) + loose;
+    if (total <= 0) {
+      toast("Please enter bales or loose pieces (total must be > 0)", "warning");
+      return;
+    }
+
+    localStorage.setItem('pil_auditor_name', auditor);
+
+    showSpinner();
+    try {
+      const resData = await API.post(`/api/stock/fg/order/${FG.selectedItemId}/verify`, {
+        bales: bales,
+        pcs_per_bale: pcs,
+        loose_pcs: loose,
+        verified_by: auditor,
+        remark: remark
+      });
+
+      // Reload active order and summaries
+      await FG.loadOrderDetails(FG.selectedItemId);
+      await FG.fetchSummary();
+      await FG.fetchParties();
+      await FG.loadAllOrdersCards();
+
+      document.getElementById('fgInRemark').value = '';
+
+      // Populate & open physical inventory tag modal
+      document.getElementById('fgSuccEntryNo').textContent     = `#${resData.entry_no}`;
+      document.getElementById('fgSuccBalesText').textContent   = `${resData.bales} Bales` + (resData.loose_pcs > 0 ? ` + ${resData.loose_pcs} Loose` : '');
+      document.getElementById('fgSuccTotalPcsText').textContent = `(${(resData.total_pcs || 0).toLocaleString()} Pieces)`;
+      document.getElementById('fgSuccOrderParty').textContent   = `Order #${resData.order_no} • ${resData.party}`;
+      document.getElementById('fgSuccPhysicalTag').textContent   = `ENTRY #${resData.entry_no} — ${resData.bales} BALES`;
+
+      Modals.open('fgSuccessModal');
+
+    } catch (err) {
+      toast(err.message || "Failed to submit batch", "error");
+    } finally {
+      hideSpinner();
+    }
+  },
+
+  // ── DELETE BATCH ─────────────────────────────────────
+  async deleteBatch(batchId, pcs) {
+    if (!confirm(`Delete batch Entry #${batchId} (${pcs} pieces)? Balance will recalculate automatically.`)) return;
+
+    showSpinner();
+    try {
+      await API.del(`/api/stock/fg/batch/${batchId}`);
+      toast(`Entry #${batchId} deleted`, "success");
+
+      if (FG.selectedItemId) await FG.loadOrderDetails(FG.selectedItemId);
+      await FG.fetchSummary();
+      await FG.fetchParties();
+      await FG.loadAllOrdersCards();
+      await FG.loadAuditLog();
+
+    } catch (err) {
+      toast(err.message || "Failed to delete entry", "error");
+    } finally {
+      hideSpinner();
+    }
+  },
+
+  renderBatchHistory(batches) {
+    const container = document.getElementById('fgDispBatchList');
+    document.getElementById('fgDispBatchCount').textContent = batches.length;
+
+    if (batches.length === 0) {
+      container.innerHTML = '<div style="padding:10px; color:var(--text-muted); font-size:12px; text-align:center;">No batches logged yet for this order.</div>';
+      return;
+    }
+
+    container.innerHTML = batches.map(b => {
+      let formula = '';
+      if (b.bales > 0 && b.pcs_per_bale > 0) formula += `${b.bales} Bales × ${b.pcs_per_bale} Pcs`;
+      if (b.loose_pcs > 0) formula += (formula ? ' + ' : '') + `${b.loose_pcs} Loose`;
+      const time = b.created_at ? b.created_at.substring(11, 16) : '';
+
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:6px;">
+          <div>
+            <div style="font-weight:700; font-size:13px; color:var(--text);">
+              <span class="badge" style="background:#16a34a; color:white; font-size:10px; padding:2px 6px; border-radius:4px; margin-right:4px;">ENTRY #${b.id}</span>
+              <span style="color:#15803d;">${(b.total_pcs || 0).toLocaleString()} Pcs</span>
+              <span style="color:var(--text-muted); font-size:12px;">(${b.bales} Bales)</span>
+            </div>
+            <div style="color:var(--text-muted); font-size:11px; margin-top:2px;">
+              ${formula} • ${b.verified_by || 'Auditor'} (${time})
+              ${b.remark ? ` • <i style="color:var(--primary);">${b.remark}</i>` : ''}
+            </div>
+          </div>
+          <button class="btn-icon danger" onclick="FG.deleteBatch(${b.id}, ${b.total_pcs})" title="Delete batch">
+            🗑️
+          </button>
+        </div>
+      `;
+    }).join('');
+  },
+
+  // ── VIEW 3: SERIAL AUDIT LOG ─────────────────────────
+  async loadAuditLog() {
+    showSpinner();
+    try {
+      FG.allLogData = await API.get(`/api/stock/fg/${State.activeDeptId}/log`);
+      FG.renderAuditLog();
+    } catch (err) {
+      toast("Failed to load audit log", "error");
+    } finally {
+      hideSpinner();
+    }
+  },
+
+  filterAuditLog() {
+    FG.renderAuditLog();
+  },
+
+  renderAuditLog() {
+    const q = (document.getElementById('fgLogSearchInput').value || '').toLowerCase();
+    const container = document.getElementById('fgAuditLogContainer');
+
+    const filtered = FG.allLogData.filter(r => 
+      String(r.entry_no).includes(q) ||
+      String(r.order_no).toLowerCase().includes(q) ||
+      r.party.toLowerCase().includes(q) ||
+      r.verified_by.toLowerCase().includes(q) ||
+      (r.remark && r.remark.toLowerCase().includes(q))
+    );
+
+    document.getElementById('fgLogEntriesCount').textContent = `Showing ${filtered.length} of ${FG.allLogData.length} serial entries`;
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px;">No log entries found.</div>';
+      return;
+    }
+
+    container.innerHTML = filtered.map(r => {
+      let formula = '';
+      if (r.bales > 0 && r.pcs_per_bale > 0) formula += `${r.bales} Bales × ${r.pcs_per_bale} Pcs`;
+      if (r.loose_pcs > 0) formula += (formula ? ' + ' : '') + `${r.loose_pcs} Loose`;
+      const time = r.created_at ? r.created_at.substring(0, 16).replace('T', ' ') : '';
+
+      return `
+        <div class="fg-card mb-2" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <span class="badge" style="background:#16a34a; color:white; font-weight:800; font-size:13px; padding:3px 8px; border-radius:6px;">ENTRY #${r.entry_no}</span>
+            <span style="font-size:11px; color:var(--text-muted);">🕒 ${time}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin:8px 0 4px;">
+            <span style="font-weight:800; font-size:17px; color:var(--text);">
+              ${r.bales} Bales <small style="font-size:13px; color:var(--text-muted);">(${(r.total_pcs || 0).toLocaleString()} Pcs)</small>
+            </span>
+            <span class="badge" style="background:#f1f5f9; color:var(--primary); border:1px solid #cbd5e1; font-weight:700;">#${r.order_no}</span>
+          </div>
+          <div style="font-weight:700; font-size:13px; color:var(--text-muted); margin-bottom:2px;">${r.party}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">Size: ${r.bag_size || '—'} • ${formula}</div>
+
+          <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 10px; display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+            <div>
+              <span style="color:#16a34a; font-weight:800;">🏷️ Physical Tag:</span> <b>ENTRY #${r.entry_no} (${r.bales} Bales)</b>
+              <div style="color:var(--text-muted); margin-top:2px;">👤 ${r.verified_by} ${r.remark ? '• ' + r.remark : ''}</div>
+            </div>
+            <button class="btn-icon danger" onclick="FG.deleteBatch(${r.id}, ${r.total_pcs})" title="Delete entry">
+              🗑️
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  // ── VIEW 2: ORDERS LIST (CARDS) ───────────────────────
+  async loadAllOrdersCards() {
+    try {
+      let combined = [];
+      for (const p of FG.currentParties) {
+        const ords = await API.get(`/api/stock/fg/${State.activeDeptId}/orders?party=${encodeURIComponent(p.party)}`);
+        combined = combined.concat(ords);
+      }
+      FG.allOrdersData = combined;
+      FG.renderOrdersCards();
+    } catch (err) {
+      console.error("FG Orders cards error:", err);
+    }
+  },
+
+  setFilter(status, btn) {
+    FG.currentFilterStatus = status;
+    document.querySelectorAll('#fgFilterStatusPills button').forEach(b => {
+      b.className = 'filter-pill';
+    });
+    btn.className = 'filter-pill active';
+    FG.renderOrdersCards();
+  },
+
+  renderOrdersCards() {
+    const q = (document.getElementById('fgCardSearchInput').value || '').toLowerCase();
+    const container = document.getElementById('fgOrderCardsContainer');
+
+    const filtered = FG.allOrdersData.filter(o => {
+      const matchesQ = o.party.toLowerCase().includes(q) || String(o.order_no).toLowerCase().includes(q);
+      const matchesStatus = FG.currentFilterStatus === 'ALL' || o.status.startsWith(FG.currentFilterStatus);
+      return matchesQ && matchesStatus;
+    });
+
+    document.getElementById('fgOrdersListCount').textContent = `Showing ${filtered.length} of ${FG.allOrdersData.length} orders`;
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-muted); font-size:13px;">No matching orders found.</div>';
+      return;
+    }
+
+    container.innerHTML = filtered.map(o => {
+      let statusClass = 'status-pending';
+      if (o.status === 'Match') statusClass = 'status-match';
+      else if (o.status.startsWith('Surplus')) statusClass = 'status-surplus';
+      else if (o.status.startsWith('Partial')) statusClass = 'status-partial';
+
+      const pct = o.ready_pcs > 0 ? Math.min(100, Math.round((o.verified_pcs / o.ready_pcs) * 100)) : 0;
+
+      return `
+        <div class="order-card" onclick="FG.selectOrderAndGo('${FG.escapeJs(o.party)}', ${o.id})">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <span style="font-weight:800; color:var(--primary);">#${o.order_no}</span>
+            <span class="badge-status ${statusClass}">${o.status}</span>
+          </div>
+          <div style="font-weight:700; color:var(--text); font-size:13px; margin-bottom:4px;">${o.party}</div>
+          <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px;">
+            Size: ${o.data['BAG SIZE'] || '—'} | Type: ${o.data['TYPE'] || '—'} | Wt: ${o.data['BAG WT'] || '—'}
+          </div>
+          <div class="progress-bar mb-2" style="height:5px;">
+            <div class="progress-fill ${pct === 100 ? 'done' : ''}" style="width:${pct}%"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:11px;">
+            <span>Target: <b style="color:var(--text);">${(o.ready_pcs || 0).toLocaleString()}</b></span>
+            <span>Verified: <b class="text-success">${(o.verified_pcs || 0).toLocaleString()}</b></span>
+            <span>Pending: <b class="text-warning">${Math.max(0, o.pending_pcs || 0).toLocaleString()}</b></span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  async selectOrderAndGo(party, orderId) {
+    await FG.selectParty(party);
+    setTimeout(async () => {
+      await FG.selectOrder(orderId);
+      FG.switchTab('verify');
+    }, 200);
+  },
+
+  // ── TAB SWITCHING ────────────────────────────────────
+  switchTab(tab) {
+    document.getElementById('fgViewVerify').style.display  = tab === 'verify'  ? 'block' : 'none';
+    document.getElementById('fgViewOrders').style.display  = tab === 'orders'  ? 'block' : 'none';
+    document.getElementById('fgViewLog').style.display     = tab === 'log'     ? 'block' : 'none';
+    document.getElementById('fgViewSummary').style.display = tab === 'summary' ? 'block' : 'none';
+
+    document.getElementById('fgTabVerify').classList.toggle('active', tab === 'verify');
+    document.getElementById('fgTabOrders').classList.toggle('active', tab === 'orders');
+    document.getElementById('fgTabLog').classList.toggle('active', tab === 'log');
+    document.getElementById('fgTabSummary').classList.toggle('active', tab === 'summary');
+
+    if (tab === 'log') {
+      FG.loadAuditLog();
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  },
+
+  exportExcel() {
+    if (!State.activeDeptId) return;
+    toast("Generating 2-sheet FG report...", "info");
+    window.location.href = `/api/stock/${State.activeDeptId}/export`;
+  },
+
+  escapeJs(str) {
+    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+};
+
+// Global click outside combobox handler
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#fgComboParty')) {
+    const dd = document.getElementById('fgPartyDropdown');
+    if (dd) dd.style.display = 'none';
+  }
+  if (!e.target.closest('#fgComboOrder')) {
+    const dd = document.getElementById('fgOrderDropdown');
+    if (dd) dd.style.display = 'none';
+  }
 });
 
 // ── BOOT ──────────────────────────────────────────────

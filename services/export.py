@@ -2,7 +2,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import io
-from typing import List
+from typing import List, Any
 from models import Department, StockItem
 
 
@@ -178,6 +178,157 @@ def generate_export(dept: Department, items: List[StockItem], base_url: str = ""
     ws.cell(row=summary_row + 4, column=1, value=f"Discrepancies          : {diff_count}")
     ws.cell(row=summary_row + 5, column=1, value=f"Extra Stock Found      : {len(extra_items)}")
     ws.cell(row=summary_row + 6, column=1, value=f"Photos Attached        : {with_photos}")
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def generate_fg_export(dept: Department, items: List[StockItem], batches: List[Any]) -> bytes:
+    """Generate Excel export for Finish Goods Specific Method:
+    Sheet 1: Order-wise Audit Ledger with physical verified total, difference, status, and breakdown.
+    Sheet 2: Serial Audit Log listing all verified batches in chronological serial entry order.
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = dept.name[:31]
+
+    # Map batches by item_id
+    batch_dict = {}
+    for b in batches:
+        batch_dict.setdefault(b.stock_item_id, []).append(b)
+
+    original_cols = dept.columns or []
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill("solid", fgColor="1565C0")
+    match_fill = PatternFill("solid", fgColor="C8E6C9")
+    diff_fill = PatternFill("solid", fgColor="FFCDD2")
+    pending_fill = PatternFill("solid", fgColor="FFF9C4")
+    extra_fill = PatternFill("solid", fgColor="E1BEE7")
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    thin = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+
+    export_headers = original_cols + ["Physical Qty (Total Pcs)", "Difference", "Status", "Detailed Batch Breakdown"]
+    ws.append(export_headers)
+
+    for col_idx in range(1, len(export_headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+        cell.border = thin
+
+    mgmt_items = [i for i in items if i.management_qty is not None]
+    extra_items = [i for i in items if i.management_qty is None]
+    all_ordered = mgmt_items + extra_items
+
+    for row_idx, item in enumerate(all_ordered, start=2):
+        row_data = item.data or {}
+        item_batches = batch_dict.get(item.id, [])
+        total_verified = sum(b.total_pcs for b in item_batches)
+        ready_pcs = item.management_qty or 0.0
+        diff = total_verified - ready_pcs
+        is_extra = item.management_qty is None
+
+        if is_extra:
+            status = "⭐ Extra Stock"
+            row_fill = extra_fill
+        elif total_verified == 0:
+            status = "⏳ Pending"
+            row_fill = pending_fill
+        elif diff == 0:
+            status = "✅ Match"
+            row_fill = match_fill
+        else:
+            status = f"❌ Discrepancy ({diff:+})"
+            row_fill = diff_fill
+
+        breakdown_parts = []
+        for b in item_batches:
+            part_str = f"Entry #{b.id}: "
+            if b.bales and b.pcs_per_bale:
+                part_str += f"{b.bales} Bales x {b.pcs_per_bale} Pcs"
+            if b.loose_pcs:
+                part_str += f" + {b.loose_pcs} Loose"
+            time_str = b.created_at.strftime("%d-%m-%Y %H:%M") if b.created_at else ""
+            part_str += f" = {b.total_pcs} Pcs ({b.verified_by} at {time_str})"
+            if b.remark:
+                part_str += f" [{b.remark}]"
+            breakdown_parts.append(part_str)
+
+        breakdown_text = "; \n".join(breakdown_parts) if breakdown_parts else "—"
+
+        row_values = [row_data.get(c, "") for c in original_cols]
+        row_values += [
+            total_verified if total_verified > 0 else "—",
+            diff if total_verified > 0 and not is_extra else "—",
+            status,
+            breakdown_text
+        ]
+        ws.append(row_values)
+
+        for col_idx in range(1, len(export_headers) + 1):
+            c = ws.cell(row=row_idx, column=col_idx)
+            c.border = thin
+            c.alignment = left if col_idx == len(export_headers) else center
+            if col_idx > len(original_cols):
+                c.fill = row_fill
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = min(max(max_len + 3, 12), 50)
+
+    # ── SHEET 2: SERIAL AUDIT LOG ────────────────────────────
+    ws_log = wb.create_sheet(title="Serial Audit Log")
+    log_headers = [
+        "Entry #", "Date & Time", "Party Name", "Order No", "Bales Count", 
+        "Pcs Per Bale", "Loose Pcs", "Total Verified Pcs", "Verified By", "Remark / Location"
+    ]
+    ws_log.append(log_headers)
+
+    log_header_fill = PatternFill("solid", fgColor="0D47A1")
+    for col_idx in range(1, len(log_headers) + 1):
+        c = ws_log.cell(row=1, column=col_idx)
+        c.font = header_font
+        c.fill = log_header_fill
+        c.alignment = center
+        c.border = thin
+
+    item_map = {i.id: i for i in items}
+    party_field = dept.party_col or "PARTY"
+    order_field = dept.order_col or "ORDER NO"
+
+    for row_idx, b in enumerate(batches, start=2):
+        item_ref = item_map.get(b.stock_item_id)
+        i_data = item_ref.data if item_ref else {}
+        party_name = i_data.get(party_field, "")
+        order_num = i_data.get(order_field, "")
+
+        log_row = [
+            f"Entry #{b.id}",
+            b.created_at.strftime("%d-%m-%Y %H:%M") if b.created_at else "—",
+            party_name,
+            f"#{order_num}",
+            b.bales,
+            b.pcs_per_bale,
+            b.loose_pcs,
+            b.total_pcs,
+            b.verified_by,
+            b.remark or "—"
+        ]
+        ws_log.append(log_row)
+
+        for col_idx in range(1, len(log_headers) + 1):
+            c = ws_log.cell(row=row_idx, column=col_idx)
+            c.border = thin
+            c.alignment = center
+
+    for col in ws_log.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws_log.column_dimensions[col_letter].width = min(max(max_len + 3, 12), 35)
 
     buffer = io.BytesIO()
     wb.save(buffer)

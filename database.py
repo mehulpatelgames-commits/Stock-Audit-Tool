@@ -19,8 +19,18 @@ async def get_db():
 
 
 async def init_db():
+    import models  # Register all ORM models with Base.metadata
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Safe column migration for departments table
+        try:
+            from sqlalchemy import text
+            await conn.execute(text("ALTER TABLE departments ADD COLUMN IF NOT EXISTS verification_method VARCHAR DEFAULT 'general';"))
+            await conn.execute(text("ALTER TABLE departments ADD COLUMN IF NOT EXISTS party_col VARCHAR;"))
+            await conn.execute(text("ALTER TABLE departments ADD COLUMN IF NOT EXISTS order_col VARCHAR;"))
+            await conn.execute(text("ALTER TABLE departments ADD COLUMN IF NOT EXISTS ready_qty_col VARCHAR;"))
+        except Exception:
+            pass
 
     # Seed default staff/admin users if database is fresh
     from models import AppUser
