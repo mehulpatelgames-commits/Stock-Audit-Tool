@@ -80,7 +80,7 @@ html, body {
 }
 
 /* ── FORM ELEMENTS ───────────────────────────────── */
-select, input[type="text"], input[type="number"], input[type="file"], textarea {
+select, input[type="text"], input[type="password"], input[type="number"], input[type="file"], textarea {
   width: 100%;
   padding: 14px 16px;
   border: 2px solid var(--border);
