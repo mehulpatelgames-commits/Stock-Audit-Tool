@@ -13,8 +13,20 @@ SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
 
 def _drive_configured() -> bool:
-    """Return True only if Google SA JSON and Folder ID are both set."""
-    return bool(settings.GOOGLE_SA_JSON and settings.GOOGLE_SA_JSON.strip() not in ("", "{}"))
+    """Return True only if Google SA JSON has actual valid private_key and client_email, and Folder ID is valid."""
+    raw = (settings.GOOGLE_SA_JSON or "").strip()
+    folder_id = (settings.DRIVE_FOLDER_ID or "").strip()
+    if not raw or raw in ("{}", "") or not folder_id or "your_drive_folder_id_here" in folder_id:
+        return False
+    try:
+        sa_info = json.loads(raw)
+        return bool(
+            sa_info.get("private_key")
+            and "..." not in str(sa_info.get("private_key"))
+            and sa_info.get("client_email")
+        )
+    except Exception:
+        return False
 
 
 def _save_locally(file_bytes: bytes, filename: str) -> str:
@@ -62,15 +74,19 @@ def _upload_to_drive_sync(file_bytes: bytes, filename: str, content_type: str) -
 async def upload_photo(file_bytes: bytes, filename: str, content_type: str) -> str:
     """
     Upload photo — auto-selects storage:
-      • Local testing  → static/uploads/  (no credentials needed)
-      • Production     → Google Drive      (requires GOOGLE_SA_JSON + DRIVE_FOLDER_ID)
+      • Google Drive if valid credentials exist
+      • Falls back to local disk if Drive upload fails or is not configured
     Returns a URL string.
     """
     if _drive_configured():
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, _upload_to_drive_sync, file_bytes, filename, content_type
-        )
+        try:
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None, _upload_to_drive_sync, file_bytes, filename, content_type
+            )
+        except Exception as e:
+            print(f"[PHOTO_UPLOAD_WARN] Drive upload failed: {e}. Falling back to local storage.")
+            return _save_locally(file_bytes, filename)
     else:
         return _save_locally(file_bytes, filename)
 

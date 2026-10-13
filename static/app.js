@@ -832,14 +832,14 @@ const ExtraStock = {
           if (newItem?.id) fd.append('stock_item_id', newItem.id);
           try {
             await API.form('/api/photo/upload', fd);
+            toast('✅ Extra stock & photo added!', 'success');
           } catch(photoErr) {
-            // Photo upload failing (e.g. Drive not configured) shouldn't fail the whole entry
-            toast('Stock added ✅ but photo upload failed', 'warning');
+            toast('⚠️ Stock added, but photo upload failed: ' + (photoErr.message || ''), 'warning');
           }
         }
+      } else {
+        toast('✅ Extra stock added!', 'success');
       }
-
-      toast('✅ Extra stock added!', 'success');
 
       // Reset form
       dept.columns.forEach(col => {
