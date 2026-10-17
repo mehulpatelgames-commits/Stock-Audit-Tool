@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import func
 from database import get_db
 from models import StockItem, Department, StockBatch
-from schemas import StockItemOut, StockUpdateRequest, EditLockRequest, FGBatchAddRequest
+from schemas import StockItemOut, StockUpdateRequest, EditLockRequest, FGBatchAddRequest, BulkVerifyManagementRequest
 from services.export import generate_export, generate_fg_export
 from datetime import datetime, timezone
 from pydantic import BaseModel
@@ -73,6 +73,46 @@ async def update_stock(item_id: int, body: StockUpdateRequest, db: AsyncSession 
     item.edit_started_at = None
     await db.commit()
     return {"message": "Saved"}
+
+
+@router.post("/bulk-verify-management")
+async def bulk_verify_management(body: BulkVerifyManagementRequest, db: AsyncSession = Depends(get_db)):
+    """Bulk verify items by setting physical_qty = management_qty for selected items"""
+    if not body.item_ids:
+        raise HTTPException(status_code=400, detail="No items selected for bulk verification")
+
+    # Fetch eligible items belonging to department with non-null management_qty
+    query = select(StockItem).where(
+        StockItem.department_id == body.department_id,
+        StockItem.id.in_(body.item_ids),
+        StockItem.management_qty.isnot(None)
+    )
+    if not body.overwrite_verified:
+        query = query.where(StockItem.verified == False)
+
+    result = await db.execute(query)
+    items = result.scalars().all()
+
+    if not items:
+        return {"message": "No eligible pending items found to verify", "updated_count": 0}
+
+    now = datetime.now(timezone.utc)
+    remark = body.remark.strip() if body.remark else "Bulk verified as per management qty"
+
+    for item in items:
+        item.physical_qty = item.management_qty
+        item.verified = True
+        item.verified_by = body.verified_by
+        item.verified_at = now
+        item.remark = remark
+        item.being_edited_by = None
+        item.edit_started_at = None
+
+    await db.commit()
+    return {
+        "message": f"Successfully verified {len(items)} items as per management quantity",
+        "updated_count": len(items)
+    }
 
 
 @router.patch("/{item_id}/edit-lock")

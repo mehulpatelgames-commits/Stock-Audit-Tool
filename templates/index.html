@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>PIL Stock Audit</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=7">
+  <link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
 
@@ -171,6 +171,22 @@
     </div>
 
     <div class="results-meta" id="resultsMeta"></div>
+
+    <!-- Bulk Action Bar (Option B) -->
+    <div class="bulk-action-bar" id="bulkActionBar" style="display:none;">
+      <div class="bulk-bar-left">
+        <label class="bulk-select-all-label">
+          <input type="checkbox" id="bulkSelectAllPending" onchange="Audit.toggleSelectAllPending(this.checked)">
+          <span id="bulkSelectAllText">Select All Pending (0)</span>
+        </label>
+      </div>
+      <div class="bulk-bar-right">
+        <button class="btn-bulk-verify" id="btnBulkVerify" onclick="Audit.openBulkVerifyModal()" disabled>
+          ⚡ Verify Selected (<span id="bulkSelectedCount">0</span>)
+        </button>
+      </div>
+    </div>
+
     <div id="stockList"></div>
   </div>
 
@@ -659,7 +675,45 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════
+     MODAL: BULK VERIFY CONFIRMATION
+══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="bulkVerifyModal">
+  <div class="modal-sheet" style="max-height:85vh; overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div class="modal-title" style="display:flex; align-items:center; gap:8px;">
+      <span>⚡ Bulk Stock Verification</span>
+    </div>
+
+    <div class="bulk-summary-box">
+      <div class="bulk-summary-row">
+        <span>Selected Items:</span>
+        <b id="bulkModalItemCount">0 items</b>
+      </div>
+      <div class="bulk-summary-row">
+        <span>Total Management Quantity:</span>
+        <b id="bulkModalTotalQty" style="color:var(--primary); font-size:16px;">0</b>
+      </div>
+      <div class="bulk-summary-sub">
+        Physical quantity will be saved equal to management quantity for all selected items.
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:14px;">
+      <label>Audit Remark (optional)</label>
+      <input type="text" id="bulkRemarkInput" value="Bulk verified as per management qty" placeholder="Notes for this bulk verification">
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:20px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="Modals.close('bulkVerifyModal')">Cancel</button>
+      <button class="btn btn-success" style="flex:2;" id="btnConfirmBulkVerify" onclick="Audit.confirmBulkVerify()">
+        ✅ Verify (<span id="bulkModalBtnCount">0</span>) Items
+      </button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.mini.min.js"></script>
-<script src="/static/app.js?v=11"></script>
+<script src="/static/app.js?v=12"></script>
 </body>
 </html>

@@ -108,6 +108,13 @@ class StockUpdateRequest(BaseModel):
     remark: Optional[str] = ""
     verified_by: str
 
+class BulkVerifyManagementRequest(BaseModel):
+    department_id: int
+    item_ids: List[int]
+    verified_by: str
+    remark: Optional[str] = "Bulk verified as per management qty"
+    overwrite_verified: Optional[bool] = False
+
 class EditLockRequest(BaseModel):
     user_name: str
     action: str  # "lock" | "unlock"

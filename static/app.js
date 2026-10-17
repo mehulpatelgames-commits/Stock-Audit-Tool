@@ -537,6 +537,7 @@ const Staff = {
 // AUDIT
 // ══════════════════════════════════════════════════════
 const Audit = {
+  selectedItemIds: new Set(),
 
   // Admin only — dept switching chips
   renderDeptChips() {
@@ -591,6 +592,7 @@ const Audit = {
     try {
       const items = await API.get(`/api/stock/${State.activeDeptId}`);
       State.stockItems = items;
+      Audit.selectedItemIds.clear();
       if (subEl && dept) subEl.textContent = `${items.length} items · General Physical Verification`;
       document.getElementById('globalSearch').value = '';
       Audit.renderDynamicFilters();
@@ -637,8 +639,10 @@ const Audit = {
           <div class="empty-icon">🔍</div>
           <p>Use the search bar above<br>to find stock items</p>
         </div>`;
+      Audit.updateBulkBarUI();
     } else {
       Audit.renderStockList();
+      Audit.updateBulkBarUI();
     }
   },
 
@@ -686,12 +690,24 @@ const Audit = {
         ? `<span style="background:#EDE7F6; color:#5E35B1; font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px; margin-right:4px;">📷 Photo</span>`
         : '';
 
+      const isSelected = Audit.selectedItemIds.has(item.id);
+      const checkboxHTML = (item.management_qty != null && !item.verified)
+        ? `<div class="item-checkbox-wrapper" onclick="event.stopPropagation()">
+             <input type="checkbox" class="stock-item-checkbox" data-id="${item.id}"
+                    ${isSelected ? 'checked' : ''}
+                    onchange="Audit.onItemCheckboxChange(${item.id}, this.checked)">
+           </div>`
+        : '';
+
       return `
         <div class="stock-card ${cardClass}" onclick="Audit.openStockModal(${idx})">
           <div class="stock-card-header">
-            <div>
-              <div class="stock-card-title">${item.data[cols[0]] || 'Item ' + (idx+1)}</div>
-              <div class="stock-card-sub">${item.data[cols[1]] || ''}</div>
+            <div style="display:flex; align-items:center;">
+              ${checkboxHTML}
+              <div>
+                <div class="stock-card-title">${item.data[cols[0]] || 'Item ' + (idx+1)}</div>
+                <div class="stock-card-sub">${item.data[cols[1]] || ''}</div>
+              </div>
             </div>
             <div style="display:flex; align-items:center; gap:4px;">
               ${photoBadge}
@@ -877,6 +893,124 @@ const Audit = {
     Audit.applyFilter();
     Modals.close('filterModal');
     toast('Filter preferences saved', 'success');
+  },
+
+  onItemCheckboxChange(itemId, isChecked) {
+    if (isChecked) {
+      Audit.selectedItemIds.add(itemId);
+    } else {
+      Audit.selectedItemIds.delete(itemId);
+    }
+    Audit.updateBulkBarUI();
+  },
+
+  toggleSelectAllPending(checked) {
+    const pending = State.filteredItems.filter(i => !i.verified && i.management_qty != null);
+    if (checked) {
+      pending.forEach(i => Audit.selectedItemIds.add(i.id));
+    } else {
+      pending.forEach(i => Audit.selectedItemIds.delete(i.id));
+    }
+    // Update all visible checkboxes in DOM directly
+    document.querySelectorAll('.stock-item-checkbox').forEach(cb => {
+      const id = parseInt(cb.getAttribute('data-id'));
+      if (id) cb.checked = Audit.selectedItemIds.has(id);
+    });
+    Audit.updateBulkBarUI();
+  },
+
+  updateBulkBarUI() {
+    const bar = document.getElementById('bulkActionBar');
+    if (!bar) return;
+
+    if (!State.filteredItems.length) {
+      bar.style.display = 'none';
+      return;
+    }
+
+    const pending = State.filteredItems.filter(i => !i.verified && i.management_qty != null);
+    if (pending.length === 0 && Audit.selectedItemIds.size === 0) {
+      bar.style.display = 'none';
+      return;
+    }
+
+    bar.style.display = 'flex';
+
+    const selectAllCb = document.getElementById('bulkSelectAllPending');
+    const selectAllText = document.getElementById('bulkSelectAllText');
+    const btnVerify = document.getElementById('btnBulkVerify');
+    const countSpan = document.getElementById('bulkSelectedCount');
+
+    if (selectAllText) {
+      selectAllText.textContent = `Select All Pending (${pending.length})`;
+    }
+
+    if (selectAllCb) {
+      selectAllCb.checked = pending.length > 0 && pending.every(i => Audit.selectedItemIds.has(i.id));
+    }
+
+    const selCount = Audit.selectedItemIds.size;
+    if (countSpan) countSpan.textContent = selCount;
+    if (btnVerify) btnVerify.disabled = selCount === 0;
+  },
+
+  openBulkVerifyModal() {
+    const selIds = Array.from(Audit.selectedItemIds);
+    if (selIds.length === 0) {
+      toast('Select at least one item to verify', 'warning');
+      return;
+    }
+
+    const selectedItems = State.stockItems.filter(i => Audit.selectedItemIds.has(i.id));
+    const totalQty = selectedItems.reduce((acc, item) => acc + (Number(item.management_qty) || 0), 0);
+
+    const countEl = document.getElementById('bulkModalItemCount');
+    const qtyEl = document.getElementById('bulkModalTotalQty');
+    const btnCountEl = document.getElementById('bulkModalBtnCount');
+
+    if (countEl) countEl.textContent = `${selectedItems.length} items`;
+    if (qtyEl) qtyEl.textContent = `${Number(totalQty.toFixed(2)).toLocaleString()} Units`;
+    if (btnCountEl) btnCountEl.textContent = selectedItems.length;
+
+    Modals.open('bulkVerifyModal');
+  },
+
+  async confirmBulkVerify() {
+    const selIds = Array.from(Audit.selectedItemIds);
+    if (selIds.length === 0) return;
+
+    const remark = (document.getElementById('bulkRemarkInput')?.value || '').trim() || 'Bulk verified as per management qty';
+
+    Modals.close('bulkVerifyModal');
+    showSpinner();
+
+    try {
+      const res = await API.post('/api/stock/bulk-verify-management', {
+        department_id: State.activeDeptId,
+        item_ids: selIds,
+        verified_by: State.user,
+        remark: remark,
+        overwrite_verified: false
+      });
+
+      toast(`✅ ${res.message || 'Items verified successfully'}`, 'success');
+
+      Audit.selectedItemIds.clear();
+      await Audit.loadStock();
+
+      // Refresh active audit stats and dashboard
+      if (State.activeAudit) {
+        const audit = await API.get('/api/audits/active');
+        State.activeAudit = audit;
+        const depts = await API.get(`/api/departments/audit/${audit.id}`);
+        State.departments = Array.isArray(depts) ? depts : [];
+        Dashboard.render();
+      }
+    } catch(e) {
+      toast(e.message || 'Bulk verification failed', 'error');
+    } finally {
+      hideSpinner();
+    }
   }
 };
 
